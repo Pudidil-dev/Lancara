@@ -1,11 +1,12 @@
 'use client'
 import Link from 'next/link'
 import { useEffect, useId, useState } from 'react'
-import { Dialog, ErrorState, Icon, Loading, type IconName } from '@/components/ui'
+import { Dialog, ErrorState, Icon, Loading, type IconName , Label, Input, Button } from '@/components/ui'
 import { useMutation } from '@/hooks/useMutation'
 import { useOnline } from '@/hooks/useOnline'
 import { usePolling } from '@/hooks/usePolling'
-import { EVENT_ID, RUNDOWN_PATH, type RundownResponse } from '@/hooks/types'
+import type { RundownResponse } from '@/hooks/types'
+import { useEvent } from '@/hooks/useEvent'
 import { zoneAbbrev } from '@/lib/time'
 import type { TelegramGroup as ServerTelegramGroup } from '@/modules/notifier/types'
 import styles from './notifier.module.css'
@@ -25,7 +26,6 @@ interface TelegramMe {
   pic_roles: Array<{ event_id: string; role_id: string }>
 }
 interface LinkResult { link: string; expires_at: string }
-const GROUPS_PATH = `/api/events/${EVENT_ID}/telegram/groups`
 
 const STATUS: Record<string, { text: string; tone: string; icon: IconName }> = {
   pending: { text: 'Menunggu proses', tone: 'warning', icon: 'clock' },
@@ -84,13 +84,14 @@ function TelegramLink({ result, kind, timezone }: { result: LinkResult; kind: 's
   const label = kind === 'startgroup' ? 'Tautan hubungkan grup' : 'Tautan Telegram saya'
   return <div className={styles.linkBox}>
     <p>{kind === 'startgroup' ? 'Buka Telegram, pilih grup kru, lalu kembali ke sini untuk menyetujui grup.' : 'Buka Telegram dan tekan Start. Tautan akun akan muncul di sini setelah berhasil.'}</p>
-    <div className="field"><label htmlFor={inputId}>{label}</label><div className={styles.linkRow}><input id={inputId} value={expired ? '' : link} readOnly onFocus={(event) => event.target.select()} /><button className="btn" type="button" disabled={expired} onClick={() => void copy()}><Icon name="share" />Salin tautan</button></div></div>
-    <div className={styles.actions}>{!expired && <a className="btn btn-primary" href={link} target="_blank" rel="noopener noreferrer"><Icon name="arrow-right" />Buka Telegram</a>}<span className={styles.muted}>{expired ? 'Tautan kedaluwarsa. Buat tautan baru.' : `Sekali pakai · berlaku hingga ${notifierTime(result.expires_at, timezone)}`}</span></div>
+    <div className="field"><Label htmlFor={inputId}>{label}</Label><div className={styles.linkRow}><Input id={inputId} value={expired ? '' : link} readOnly onFocus={(event) => event.target.select()} /><Button variant="outline" className="btn" type="button" disabled={expired} onClick={() => void copy()}><Icon name="share" />Salin tautan</Button></div></div>
+    <div className={styles.actions}>{!expired && <Button asChild variant="default"><a className="btn btn-primary" href={link} target="_blank" rel="noopener noreferrer"><Icon name="arrow-right" />Buka Telegram</a></Button>}<span className={styles.muted}>{expired ? 'Tautan kedaluwarsa. Buat tautan baru.' : `Sekali pakai · berlaku hingga ${notifierTime(result.expires_at, timezone)}`}</span></div>
     <p className={styles.notice} role="status" aria-live="polite">{notice && <><Icon name="info" />{notice}</>}</p>
   </div>
 }
 
 function GroupCard({ group, enabled, timezone, refresh }: { group: TelegramGroup; enabled: boolean; timezone: string; refresh: () => Promise<void> }) {
+  const GROUPS_PATH = `/api/events/${group.event_id}/telegram/groups`
   const action = useMutation()
   const online = useOnline()
   const [draft, setDraft] = useState<{ topic: string; include: boolean } | null>(null)
@@ -119,25 +120,26 @@ function GroupCard({ group, enabled, timezone, refresh }: { group: TelegramGroup
     {group.status === 'pending' && <p className={styles.muted}>Cocokkan nama grup sebelum menyetujui. Grup ini belum menerima notifikasi.</p>}
     {group.status === 'bot_removed' && <p className={styles.muted}>Hubungkan kembali grup melalui tautan baru agar bot dapat mengirim notifikasi.</p>}
     {editable && <div className={styles.groupFields}>
-      <label className="field"><span>ID topik Telegram (opsional)</span><input inputMode="numeric" value={topic} disabled={busy} aria-invalid={!topicValid || undefined} onChange={(event) => setDraft({ topic: event.target.value, include })} placeholder="Kosongkan untuk grup utama" />{!topicValid && <span className="muted">Isi dengan bilangan bulat positif.</span>}</label>
-      <div className={styles.copy}><label className="check-label"><input type="checkbox" checked={include} disabled={busy} onChange={(event) => setDraft({ topic, include: event.target.checked })} />Sertakan tautan rundown publik</label><p className={styles.muted}>Gunakan tautan publik yang telah diaktifkan lewat tombol Bagikan pada dashboard.</p></div>
+      <Label className="field"><span>ID topik Telegram (opsional)</span><Input inputMode="numeric" value={topic} disabled={busy} aria-invalid={!topicValid || undefined} onChange={(event) => setDraft({ topic: event.target.value, include })} placeholder="Kosongkan untuk grup utama" />{!topicValid && <span className="muted">Isi dengan bilangan bulat positif.</span>}</Label>
+      <div className={styles.copy}><Label className="check-label"><Input type="checkbox" checked={include} disabled={busy} onChange={(event) => setDraft({ topic, include: event.target.checked })} />Sertakan tautan rundown publik</Label><p className={styles.muted}>Gunakan tautan publik yang telah diaktifkan lewat tombol Bagikan pada dashboard.</p></div>
     </div>}
     <div className={styles.actions}>
-      {group.status === 'pending' && <button type="button" className="btn btn-primary" disabled={busy || !topicValid} onClick={() => void update('approve')}><Icon name="check" />{action.pending ? 'Menyimpan…' : 'Setujui grup'}</button>}
-      {group.status === 'approved' && <button type="button" className="btn" disabled={busy || !draft || !topicValid} onClick={() => void update('settings')}><Icon name="check" />{action.pending ? 'Menyimpan…' : 'Simpan pengaturan grup'}</button>}
-      {editable && <button type="button" className="btn btn-danger" disabled={busy} onClick={() => { action.reset(); setRevokeOpen(true) }}><Icon name="lock" />Cabut grup</button>}
+      {group.status === 'pending' && <Button variant="default" type="button" className="btn btn-primary" disabled={busy || !topicValid} onClick={() => void update('approve')}><Icon name="check" />{action.pending ? 'Menyimpan…' : 'Setujui grup'}</Button>}
+      {group.status === 'approved' && <Button variant="outline" type="button" className="btn" disabled={busy || !draft || !topicValid} onClick={() => void update('settings')}><Icon name="check" />{action.pending ? 'Menyimpan…' : 'Simpan pengaturan grup'}</Button>}
+      {editable && <Button variant="destructive" type="button" className="btn btn-danger" disabled={busy} onClick={() => { action.reset(); setRevokeOpen(true) }}><Icon name="lock" />Cabut grup</Button>}
     </div>
     {action.error && !revokeOpen && <ErrorState error={action.error} />}
     <p className={styles.notice} role="status" aria-live="polite">{notice && <><Icon name="check" />{notice}</>}</p>
     <Dialog open={revokeOpen} title="Cabut grup Telegram" onClose={() => setRevokeOpen(false)} busy={action.pending}>
       <p>Hentikan notifikasi ke {title}? Pesan yang belum dikirim akan dilewati.</p>
       {action.error && <ErrorState error={action.error} />}
-      <div className={styles.actions}><button type="button" className="btn" disabled={action.pending} onClick={() => setRevokeOpen(false)}>Batal</button><button type="button" className="btn btn-danger" disabled={busy} onClick={() => void update('revoke')}><Icon name="lock" />{action.pending ? 'Mencabut…' : 'Ya, cabut grup'}</button></div>
+      <div className={styles.actions}><Button variant="outline" type="button" className="btn" disabled={action.pending} onClick={() => setRevokeOpen(false)}>Batal</Button><Button variant="destructive" type="button" className="btn btn-danger" disabled={busy} onClick={() => void update('revoke')}><Icon name="lock" />{action.pending ? 'Mencabut…' : 'Ya, cabut grup'}</Button></div>
     </Dialog>
   </article>
 }
 
 function MyTelegram({ timezone, roles }: { timezone: string; roles: RundownResponse['snapshot']['roles'] | null }) {
+  const { eventId: EVENT_ID } = useEvent()
   const me = usePolling<TelegramMe>('/api/me/telegram', { intervalMs: 10000 })
   const linkAction = useMutation()
   const picAction = useMutation()
@@ -182,23 +184,25 @@ function MyTelegram({ timezone, roles }: { timezone: string; roles: RundownRespo
     {!me.data && !me.error && <Loading label="Memuat akun Telegram…" />}
     {me.data && !me.data.registered && <p className="alert alert-info"><Icon name="info" /> Akun demo belum dapat ditautkan ke Telegram. <Link href="/register">Daftar akun Lancara</Link>, lalu masuk dengan akun tersebut untuk menghubungkan Telegram dan memilih peran PIC.</p>}
     {me.data?.registered && <>
-      {account ? <div className={styles.header}><div className={styles.copy}><div className={styles.identity}><strong>{account.display_snapshot || (account.username_snapshot ? `@${account.username_snapshot}` : 'Akun Telegram')}</strong><span className="badge badge-success"><Icon name="check" />Terhubung</span></div><p className={styles.muted}>Terhubung {notifierTime(account.linked_at, timezone)}{account.username_snapshot && account.display_snapshot ? ` · @${account.username_snapshot}` : ''}</p>{account.private_status === 'blocked' && <p className="alert alert-action"><Icon name="alert" /> Bot diblokir di chat pribadi. Notifikasi grup tetap dapat dikirim.</p>}</div><button type="button" className="btn btn-danger" disabled={disabled} onClick={() => { unlinkAction.reset(); setUnlinkOpen(true) }}><Icon name="lock" />Putuskan tautan</button></div>
-        : <div className={styles.actions}><span className="badge badge-neutral"><Icon name="info" />Belum terhubung</span><button type="button" className="btn" disabled={disabled} onClick={() => void makeLink()}><Icon name="share" />{linkAction.pending ? 'Membuat tautan…' : link ? 'Buat tautan akun baru' : 'Hubungkan Telegram saya'}</button></div>}
+      {account ? <div className={styles.header}><div className={styles.copy}><div className={styles.identity}><strong>{account.display_snapshot || (account.username_snapshot ? `@${account.username_snapshot}` : 'Akun Telegram')}</strong><span className="badge badge-success"><Icon name="check" />Terhubung</span></div><p className={styles.muted}>Terhubung {notifierTime(account.linked_at, timezone)}{account.username_snapshot && account.display_snapshot ? ` · @${account.username_snapshot}` : ''}</p>{account.private_status === 'blocked' && <p className="alert alert-action"><Icon name="alert" /> Bot diblokir di chat pribadi. Notifikasi grup tetap dapat dikirim.</p>}</div><Button variant="destructive" type="button" className="btn btn-danger" disabled={disabled} onClick={() => { unlinkAction.reset(); setUnlinkOpen(true) }}><Icon name="lock" />Putuskan tautan</Button></div>
+        : <div className={styles.actions}><span className="badge badge-neutral"><Icon name="info" />Belum terhubung</span><Button variant="outline" type="button" className="btn" disabled={disabled} onClick={() => void makeLink()}><Icon name="share" />{linkAction.pending ? 'Membuat tautan…' : link ? 'Buat tautan akun baru' : 'Hubungkan Telegram saya'}</Button></div>}
       {!account && link && <TelegramLink key={link.link} result={link} kind="start" timezone={timezone} />}
       <fieldset className={styles.roleFields} disabled={disabled || !roles}>
         <legend>Peran PIC saya untuk acara ini</legend>
-        {(roles ?? []).map((role) => <label key={role.id} className="check-label"><input type="checkbox" checked={selected.includes(role.id)} onChange={(event) => setDraftRoles(event.target.checked ? [...selected, role.id] : selected.filter((id) => id !== role.id))} />{role.label}</label>)}
+        {(roles ?? []).map((role) => <Label key={role.id} className="check-label"><Input type="checkbox" checked={selected.includes(role.id)} onChange={(event) => setDraftRoles(event.target.checked ? [...selected, role.id] : selected.filter((id) => id !== role.id))} />{role.label}</Label>)}
       </fieldset>
       {!roles && <p className={styles.muted}>Menunggu daftar peran dari rundown.</p>}
-      <div className={styles.actions}><button type="button" className="btn" disabled={disabled || !roles || draftRoles === null} onClick={() => void saveRoles()}><Icon name="check" />{picAction.pending ? 'Menyimpan…' : 'Simpan peran PIC'}</button>{!account && <p className={styles.muted}>Peran yang dipilih akan di-mention setelah Telegram terhubung.</p>}</div>
+      <div className={styles.actions}><Button variant="outline" type="button" className="btn" disabled={disabled || !roles || draftRoles === null} onClick={() => void saveRoles()}><Icon name="check" />{picAction.pending ? 'Menyimpan…' : 'Simpan peran PIC'}</Button>{!account && <p className={styles.muted}>Peran yang dipilih akan di-mention setelah Telegram terhubung.</p>}</div>
     </>}
     {(linkAction.error || picAction.error) && <ErrorState error={(linkAction.error ?? picAction.error)!} />}
     <p className={styles.notice} role="status" aria-live="polite">{notice && <><Icon name="check" />{notice}</>}</p>
-    <Dialog open={unlinkOpen} title="Putuskan tautan Telegram" busy={unlinkAction.pending} onClose={() => setUnlinkOpen(false)}><p>Akun Telegram Anda tidak akan lagi disebut dalam notifikasi perubahan rundown.</p>{unlinkAction.error && <ErrorState error={unlinkAction.error} />}<div className={styles.actions}><button className="btn" type="button" disabled={busy} onClick={() => setUnlinkOpen(false)}>Batal</button><button className="btn btn-danger" type="button" disabled={disabled} onClick={() => void unlink()}><Icon name="lock" />{unlinkAction.pending ? 'Memutuskan…' : 'Ya, putuskan tautan'}</button></div></Dialog>
+    <Dialog open={unlinkOpen} title="Putuskan tautan Telegram" busy={unlinkAction.pending} onClose={() => setUnlinkOpen(false)}><p>Akun Telegram Anda tidak akan lagi disebut dalam notifikasi perubahan rundown.</p>{unlinkAction.error && <ErrorState error={unlinkAction.error} />}<div className={styles.actions}><Button variant="outline" className="btn" type="button" disabled={busy} onClick={() => setUnlinkOpen(false)}>Batal</Button><Button variant="destructive" className="btn btn-danger" type="button" disabled={disabled} onClick={() => void unlink()}><Icon name="lock" />{unlinkAction.pending ? 'Memutuskan…' : 'Ya, putuskan tautan'}</Button></div></Dialog>
   </div>
 }
 
 export function TelegramSettings() {
+  const { eventId: EVENT_ID, rundownPath: RUNDOWN_PATH } = useEvent()
+  const GROUPS_PATH = EVENT_ID ? `/api/events/${EVENT_ID}/telegram/groups` : null
   const groups = usePolling<{ enabled: boolean; groups: TelegramGroup[] }>(GROUPS_PATH, { intervalMs: 10000 })
   const rundown = usePolling<RundownResponse>(RUNDOWN_PATH, { intervalMs: 30000 })
   const create = useMutation()
@@ -210,10 +214,10 @@ export function TelegramSettings() {
     catch { /* Tautan baru hanya muncul setelah server membuat kode. */ }
   }
   return <section className={`card ${styles.section}`} aria-labelledby="telegram-settings-title">
-    <div className={styles.header}><div className={styles.copy}><h2 id="telegram-settings-title">Notifikasi Telegram</h2><p className={styles.muted}>Ringkasan perubahan rundown yang sudah tersimpan dikirim ke grup yang Anda setujui.</p></div><button type="button" className="btn" disabled={!online} onClick={() => void groups.refresh()}><Icon name="history" />Perbarui grup</button></div>
+    <div className={styles.header}><div className={styles.copy}><h2 id="telegram-settings-title">Notifikasi Telegram</h2><p className={styles.muted}>Ringkasan perubahan rundown yang sudah tersimpan dikirim ke grup yang Anda setujui.</p></div><Button variant="outline" type="button" className="btn" disabled={!online} onClick={() => void groups.refresh()}><Icon name="history" />Perbarui grup</Button></div>
     <p className="alert alert-info"><Icon name="info" /> Telegram mengirim notifikasi satu arah. Konfirmasi perubahan dan “Sudah dibaca” tetap dilakukan di aplikasi.</p>
     {groups.data && !groups.data.enabled && <p className="alert alert-action"><Icon name="alert" /> Notifikasi Telegram belum diaktifkan untuk aplikasi ini. Hubungi pengelola aplikasi untuk mengaktifkannya.</p>}
-    <div className={styles.header}><h3>Grup penerima</h3><button type="button" className="btn btn-primary" disabled={create.pending || !online || !groups.data?.enabled} onClick={() => void createLink()}><Icon name="plus" />{create.pending ? 'Membuat tautan…' : link ? 'Buat tautan grup baru' : 'Hubungkan grup'}</button></div>
+    <div className={styles.header}><h3>Grup penerima</h3><Button variant="default" type="button" className="btn btn-primary" disabled={create.pending || !online || !groups.data?.enabled} onClick={() => void createLink()}><Icon name="plus" />{create.pending ? 'Membuat tautan…' : link ? 'Buat tautan grup baru' : 'Hubungkan grup'}</Button></div>
     {create.error && <ErrorState error={create.error} />}
     {link && <TelegramLink key={link.link} result={link} kind="startgroup" timezone={timezone} />}
     {groups.error && <ErrorState error={groups.error} onRetry={() => void groups.refresh()} />}

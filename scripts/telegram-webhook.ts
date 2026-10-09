@@ -25,6 +25,8 @@ async function main() {
   if (!cfg.APP_BASE_URL || !cfg.TELEGRAM_WEBHOOK_SECRET) throw new Error('configuration_missing')
   const base = new URL(cfg.APP_BASE_URL)
   if (base.protocol !== 'https:' || base.username || base.password || base.search || base.hash) throw new Error('invalid_https_base')
+  const bot = await client.getMe()
+  if (!cfg.TELEGRAM_BOT_USERNAME || bot.username.toLowerCase() !== cfg.TELEGRAM_BOT_USERNAME.toLowerCase()) throw new Error('bot_username_mismatch')
   const url = new URL('/api/telegram/webhook', base.origin).toString()
   if (!await client.setWebhook({ url, secret_token: cfg.TELEGRAM_WEBHOOK_SECRET, allowed_updates: ['message', 'my_chat_member'], drop_pending_updates: process.argv.includes('--drop-pending'), max_connections: 10 })) throw new Error('webhook_set_failed')
   await query(`INSERT INTO telegram_audit (action) VALUES ('webhook_set')`)

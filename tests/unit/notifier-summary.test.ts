@@ -65,7 +65,7 @@ describe('notifier deterministic input and fallback', () => {
     expect(mocks.fetch).not.toHaveBeenCalled()
   })
   it('handles cancelled, added, other changed items, and curfew overflow', () => {
-    const p = payload(); p.changes[0].new.status = 'cancelled'; p.items_changed = 4; p.projected_finish_at = at('21:05')
+    const p = payload(); p.changes[0].new.status = 'cancelled'; p.changes[0].changes = ['start', 'status']; p.items_changed = 4; p.projected_finish_at = at('21:05')
     expect(templateParagraph(p)).toContain('Talent B dibatalkan')
     expect(templateParagraph(p)).toContain('2 segmen lain ikut berubah')
     expect(templateParagraph(p)).toContain('lewat 5 menit dari batas 21.00')
@@ -100,6 +100,15 @@ describe('notifier deterministic input and fallback', () => {
     expect(templateParagraph(p)).toContain('Talent B: perkiraan selesai berubah dari 19.45 ke 20.35 WIB')
     p.changes[0].changes = ['status']; p.changes[0].new.status = 'in_progress'
     expect(templateParagraph(p)).toContain('Talent B berubah status menjadi berlangsung')
+  })
+  it('does not announce a previous cancellation again when only item metadata changes', () => {
+    const p = payload(); p.base_version = 2; p.version = 3; p.items_changed = 1
+    p.changes = [{ ...p.changes[0], title: 'Sesi Akustik Malam', changes: ['pic'], shift_minutes: 0,
+      old: { ...p.changes[0].old!, status: 'cancelled' }, new: { ...p.changes[0].new, status: 'cancelled' } }]
+    expect(buildSummaryInput(p)).toMatchObject({ base_version: 2, version: 3, changes: [{ type: 'diperbarui', old_status: 'cancelled', status: 'cancelled' }] })
+    expect(templateParagraph(p)).toContain('Sesi Akustik Malam diperbarui')
+    expect(templateParagraph(p)).not.toContain('dibatalkan')
+    expect(validateParagraph('Sesi Akustik Malam dibatalkan.', p)).toBe(false)
   })
   it('bounds long templates and neutralizes unsolicited username mentions', () => {
     const p = payload(); p.changes[0].title = '@everyone '.repeat(40); p.changes[1].title = '&'.repeat(200)

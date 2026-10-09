@@ -126,15 +126,16 @@ export async function retryDelivery(session: Session, eventId: string, deliveryI
     // Urutan lock grup → delivery sama dengan revoke dan pembaruan chat.
     await client.query(`SELECT g.id FROM telegram_groups g JOIN notification_deliveries d ON d.group_id = g.id
       JOIN notification_outbox o ON o.id = d.outbox_id WHERE d.id = $1 AND o.event_id = $2 FOR UPDATE OF g`, [deliveryId, eventId])
-    const rows = await query<{ outbox_id: string; status: string; group_status: string }>(
-      `SELECT d.outbox_id, d.status, g.status AS group_status FROM notification_deliveries d
-       JOIN notification_outbox o ON o.id = d.outbox_id JOIN telegram_groups g ON g.id = d.group_id
+    const rows = await query<{ outbox_id: string; status: string; group_status: string; version: number; active_version: number }>(
+      `SELECT d.outbox_id, d.status, g.status AS group_status, o.version, e.active_version FROM notification_deliveries d
+       JOIN notification_outbox o ON o.id = d.outbox_id JOIN telegram_groups g ON g.id = d.group_id JOIN events e ON e.id = o.event_id
        WHERE d.id = $1 AND o.event_id = $2 FOR UPDATE OF d, o`, [deliveryId, eventId], client,
     )
     const delivery = rows[0]
     if (!delivery) throw new AppError('NOT_FOUND', 'Pengiriman tidak ditemukan pada acara ini.')
     if (!['dead', 'ambiguous'].includes(delivery.status)) throw new AppError('INVALID_STATE', 'Hanya pengiriman gagal atau belum pasti yang dapat ditindaklanjuti.')
     const manualSent = input.action === 'mark_sent'
+    if (!manualSent && delivery.version !== delivery.active_version) throw new AppError('STALE_VERSION', 'Notifikasi ini berasal dari rundown versi lama. Hanya versi aktif yang dapat dikirim.', { active_version: delivery.active_version })
     if (manualSent && delivery.status !== 'ambiguous') throw new AppError('INVALID_STATE', 'Konfirmasi manual hanya untuk pengiriman belum pasti.')
     if (!manualSent && delivery.group_status !== 'approved') throw new AppError('INVALID_STATE', 'Grup belum disetujui atau bot telah dikeluarkan.')
     await client.query(manualSent

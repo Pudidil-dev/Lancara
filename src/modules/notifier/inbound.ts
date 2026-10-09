@@ -81,7 +81,7 @@ async function limitedReply(client: Db, chatId: string, message: string): Promis
 
 async function mutate(client: Db, payload: Payload): Promise<Reply | null> {
   const chatId = payload.chat_id!
-  if (payload.identity) {
+  if (payload.identity && payload.kind !== 'account_link') {
     await query('UPDATE telegram_accounts SET username_snapshot = $2, display_snapshot = $3, last_seen_at = now() WHERE telegram_user_id = $1', [payload.identity.id, payload.identity.username, payload.identity.display], client)
   }
   if (payload.kind === 'account_link') {

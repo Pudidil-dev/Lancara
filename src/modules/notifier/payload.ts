@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { isDeepStrictEqual } from 'node:util'
 import { computeImpact, diffSnapshots } from '@/modules/engine/impact'
 import { endIso } from '@/modules/engine/schedule'
 import type { ItemDiff, RoleImpact, Snapshot } from '@/modules/engine/types'
@@ -23,8 +24,10 @@ export interface PayloadInput {
 
 export function buildPayload(input: PayloadInput): NotificationPayload {
   const { base, proposed, origin } = input
-  const diff = input.diff ?? diffSnapshots(base, proposed)
-  const impact = input.impact ?? computeImpact(base, proposed, diff, null)
+  // A cached preview may contain earlier changes. Only this committed transition is reportable.
+  const diff = diffSnapshots(base, proposed)
+  const impact = input.impact && (!input.diff || isDeepStrictEqual(input.diff, diff))
+    ? input.impact : computeImpact(base, proposed, diff, null)
   const active = proposed.items.filter(item => item.status !== 'cancelled')
   const ends = active.map(endIso).sort((a, b) => Date.parse(a) - Date.parse(b))
   const config = (['name', 'timezone', 'curfew_at'] as const).filter(field => base.event[field] !== proposed.event[field])

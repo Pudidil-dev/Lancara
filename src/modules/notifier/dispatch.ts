@@ -5,7 +5,7 @@ import { log } from '@/lib/logger'
 import { processPendingUpdates } from './inbound'
 import { plainText, renderMessage } from './render'
 import { resolveGroups, resolveMentions, resolvePublicUrl } from './recipients'
-import { summarize } from './summarize'
+import { summarize, validateParagraph } from './summarize'
 import { telegramClient, type TelegramClient } from './telegram-client'
 import type { NotificationPayload, TelegramGroup } from './types'
 
@@ -44,8 +44,21 @@ async function renewLease(token: string) {
   return rows.length > 0
 }
 
+/** Backlogged notifications are history; only the active rundown version may be sent. */
+async function expireSuperseded(db: Db) {
+  await db.query(`UPDATE notification_deliveries d SET status = 'skipped', error_code = 'superseded_version'
+    FROM notification_outbox o, events e
+    WHERE d.outbox_id = o.id AND e.id = o.event_id AND o.version < e.active_version
+      AND d.status IN ('queued','retry','ambiguous')`)
+  await db.query(`UPDATE notification_outbox o SET status = 'expired', last_error = 'superseded_version',
+      locked_until = NULL, completed_at = now()
+    FROM events e WHERE e.id = o.event_id AND o.version < e.active_version AND o.status IN ('pending','ready')
+      AND NOT EXISTS (SELECT 1 FROM notification_deliveries d WHERE d.outbox_id = o.id AND d.status = 'sending')`)
+}
+
 async function claimNextOutbox() {
   return withTransaction(async client => {
+    await expireSuperseded(client)
     const rows = await query<Outbox>(
       `SELECT o.* FROM notification_outbox o WHERE o.status = 'pending' AND o.available_at <= now()
        AND (o.locked_until IS NULL OR o.locked_until < now())
@@ -69,8 +82,13 @@ async function prepare(outbox: Outbox) {
     return
   }
   const started = performance.now()
-  const summary = outbox.summary_text ? { paragraph: outbox.summary_text, source: outbox.summary_source ?? 'template' as const } : await summarize(payload)
-  await withTransaction(async client => {
+  const summary = outbox.summary_text && validateParagraph(outbox.summary_text, payload)
+    ? { paragraph: outbox.summary_text, source: outbox.summary_source ?? 'template' as const } : await summarize(payload)
+  const prepared = await withTransaction(async client => {
+    // A new commit can arrive while the LLM is summarizing. Do not enqueue the old answer.
+    await expireSuperseded(client)
+    const current = await client.query<{ status: string }>('SELECT status FROM notification_outbox WHERE id = $1', [outbox.id])
+    if (current.rows[0]?.status !== 'pending') return false
     const groups = await resolveGroups(outbox.event_id, client)
     const recipients = await resolveMentions(payload, client)
     const publicUrl = await resolvePublicUrl(outbox.event_id, client)
@@ -83,8 +101,9 @@ async function prepare(outbox: Outbox) {
       )
     }
     await client.query("UPDATE notification_outbox SET status = 'ready', summary_text = $2, summary_source = $3, locked_until = NULL, last_error = NULL WHERE id = $1", [outbox.id, summary.paragraph, summary.source])
+    return true
   })
-  log('info', 'notifier.summary', { outbox_id: outbox.id, source: summary.source, latency_ms: Math.round(performance.now() - started) })
+  if (prepared) log('info', 'notifier.summary', { outbox_id: outbox.id, source: summary.source, latency_ms: Math.round(performance.now() - started) })
 }
 
 async function recoverSending() {
@@ -96,6 +115,7 @@ async function recoverSending() {
 
 async function reserveDelivery(): Promise<Delivery | 'deferred' | null> {
   return withTransaction(async client => {
+    await expireSuperseded(client)
     const rows = await query<Delivery>(
       `SELECT d.*, o.event_id, o.version, g.status AS group_status, g.message_thread_id FROM notification_deliveries d
        JOIN notification_outbox o ON o.id = d.outbox_id JOIN telegram_groups g ON g.id = d.group_id
@@ -129,14 +149,6 @@ async function reserveDelivery(): Promise<Delivery | 'deferred' | null> {
       await client.query('UPDATE notification_deliveries SET next_attempt_at = $2 WHERE id = $1', [delivery.id, new Date(next)])
       return 'deferred'
     }
-    // Teks asli tetap tersimpan untuk retry. Penanda kirim ulang disisipkan saat pengiriman.
-    const newer = await client.query(`SELECT 1 FROM notification_deliveries d JOIN notification_outbox o ON o.id = d.outbox_id
-      WHERE o.event_id = $1 AND o.version > $2 AND d.status = 'sent' LIMIT 1`, [delivery.event_id, delivery.version])
-    if (delivery.attempts > 0 && newer.rowCount) {
-      delivery.rendered_text = delivery.entities_fallback
-        ? delivery.rendered_text.replace(/^(Rundown v[^\n]+)/, '$1 (kirim ulang)')
-        : delivery.rendered_text.replace('</b>', '</b> (kirim ulang)')
-    }
     await client.query("UPDATE notification_deliveries SET status = 'sending', attempts = attempts + 1, ambiguous_retries = ambiguous_retries + $2, sending_started_at = now() WHERE id = $1", [delivery.id, delivery.status === 'ambiguous' ? 1 : 0])
     await client.query('INSERT INTO telegram_audit (event_id, action, target, detail) VALUES ($1,$2,$3,$4)', [delivery.event_id, 'delivery_attempt', delivery.chat_id, JSON.stringify({ delivery_id: delivery.id })])
     return { ...delivery, attempts: delivery.attempts + 1, ambiguous_retries: delivery.ambiguous_retries + (delivery.status === 'ambiguous' ? 1 : 0) }
@@ -153,7 +165,7 @@ async function recordResult(delivery: Delivery, result: Awaited<ReturnType<Retur
   let delay = BACKOFF_SECONDS[Math.min(delivery.attempts - 1, 4)]
   if (result.kind === 'forbidden') {
     status = 'skipped'
-    await db.query("UPDATE telegram_groups SET status = 'bot_removed' WHERE id = $1", [delivery.group_id])
+    await db.query("UPDATE telegram_groups SET status = 'bot_removed' WHERE id = $1 AND status <> 'revoked'", [delivery.group_id])
     await db.query('INSERT INTO telegram_audit (event_id, action, target) VALUES ($1,$2,$3)', [delivery.event_id, 'bot_removed', delivery.group_id])
   } else if (result.kind === 'rate_limited') {
     status = 'retry'
