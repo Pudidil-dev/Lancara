@@ -40,3 +40,6 @@ evidence/
 tests/
 # Folder tes (unit, integrasi, e2e) — tidak ikut repo
 tests/
+
+# Metadata lokal Supabase CLI (project ref, versi, linked-project) — jangan ikut repo
+supabase/.temp/
