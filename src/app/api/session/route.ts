@@ -9,8 +9,8 @@ import { listDemoAccounts } from '@/modules/events/service'
 export const dynamic = 'force-dynamic'
 
 export const GET = route('session.get', async (req) => {
-  const session = await sessionFromRequest(req)
-  return { session, accounts: await listDemoAccounts(), demo_mode: env().DEMO_MODE }
+  const [session, accounts] = await Promise.all([sessionFromRequest(req), listDemoAccounts()])
+  return { session, accounts, demo_mode: env().DEMO_MODE }
 })
 
 export const POST = route(

@@ -42,11 +42,11 @@ export function ChangeDetailScreen({ id, initialParseError }: { id: string; init
   const intent = useRef<ApprovalIntent | null>(null)
   const approveBusy = useRef(false)
   const settled = useRef(false)
-  const complete = useCallback((result: ApprovalResult) => {
+  const complete = useCallback((result: ApprovalResult, needsRefresh = true) => {
     if (settled.current) return
     settled.current = true
     setApproved(result); setUncertain(false); setModal(null); setActionError(null)
-    refreshQueries(); void query.refresh()
+    if (needsRefresh) refreshQueries()
   }, [query.refresh])
   const completeRef = useRef(complete)
   completeRef.current = complete
@@ -122,7 +122,7 @@ export function ChangeDetailScreen({ id, initialParseError }: { id: string; init
     approveBusy.current = true
     setActionError(null)
     if (retry) setRecovery('checking')
-    try { complete(await approval.mutate<ApprovalResult>(request)) }
+    try { complete(await approval.mutate<ApprovalResult>(request), false) }
     catch (error) {
       if (settled.current) return
       const failure = asApiError(error)
@@ -168,7 +168,7 @@ export function ChangeDetailScreen({ id, initialParseError }: { id: string; init
       </>}
       {data.decision && !approved && <section className="alert alert-success"><h2>✓ Disetujui sebagai v{data.decision.new_version}</h2><p>{data.decision.approved_by} · {formatClock(data.decision.approved_at, data.event.timezone, data.server_now)} {zoneAbbrev(data.event.timezone)}</p><p>Alasan: {data.decision.reason}</p>{authenticated && <Link href="/history">Lihat Riwayat</Link>}</section>}
       {data.change.status === 'rejected' && <section className="alert alert-blocker"><h2>! Kabar ditolak</h2><p>{data.change.reject_reason}</p></section>}
-      <div className="row"><Link href="/changes/new" className="btn">Kirim kabar lain</Link><Link href="/rundown" className="btn">Lihat rundown aktif</Link></div>
+      <div className="row"><Link href="/rundown" className="btn">Kirim kabar lain lewat AI</Link><Link href="/rundown" className="btn">Lihat rundown aktif</Link></div>
     </div>}
     <Dialog open={modal === 'approve'} title="Setujui perubahan rundown" busy={unresolved} onClose={() => { if (!unresolved) setModal(null) }}>
       <form className="stack" onSubmit={event => { event.preventDefault(); if (!uncertain) void sendApproval() }}>

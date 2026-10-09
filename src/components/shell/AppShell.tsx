@@ -42,7 +42,8 @@ function initials(name: string): string {
 export function AppShell({ children, title, description, actions }: { children: ReactNode; title: string; description?: ReactNode; actions?: ReactNode }) {
   const { session, loading, error, refresh } = useSession()
   const online = useOnline()
-  const query = usePolling<RundownResponse>(session ? RUNDOWN_PATH : null)
+  // Session dan rundown dapat dimuat bersamaan; endpoint rundown tetap memeriksa session server.
+  const query = usePolling<RundownResponse>(loading || session ? RUNDOWN_PATH : null)
   const logout = useMutation()
   const router = useRouter()
   const pathname = usePathname()

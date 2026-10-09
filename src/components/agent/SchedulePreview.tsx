@@ -66,14 +66,14 @@ export function SchedulePreview({ proposal, canConfirm }: { proposal: SchedulePr
   const reconciledKey = useRef<string | null>(null)
   const submissionBusy = useRef(false)
 
-  function finish(result: ApprovalResult) {
+  function finish(result: ApprovalResult, needsRefresh = true) {
     setCommitted(result)
     setOpen(false)
     setRecovery('idle')
     setFailure(null)
     attempted.current = null
     mutation.reset()
-    refreshQueries()
+    if (needsRefresh) refreshQueries()
   }
 
   async function reconcile(key: string) {
@@ -107,7 +107,7 @@ export function SchedulePreview({ proposal, canConfirm }: { proposal: SchedulePr
     attempted.current = body
     setFailure(null)
     try {
-      finish(await mutation.mutate<ApprovalResult>({ path: `/api/changes/${encodeURIComponent(proposal.change_id)}/approve`, body }))
+      finish(await mutation.mutate<ApprovalResult>({ path: `/api/changes/${encodeURIComponent(proposal.change_id)}/approve`, body }), false)
     } catch (error) {
       const fault = error instanceof ApiError ? error : new ApiError('NETWORK', 'Status perubahan belum diketahui.', 0, null, null)
       setFailure(fault)

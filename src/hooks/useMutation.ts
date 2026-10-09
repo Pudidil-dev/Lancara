@@ -1,7 +1,7 @@
 'use client'
 import { useRef, useState } from 'react'
 import { api, ApiError, newIdempotencyKey } from '@/lib/api-client'
-import { refreshQueries } from './usePolling'
+import { refreshQueries, resetQueries } from './usePolling'
 export type RequestStatus<T = unknown> = { status: 'not_found'; note: string } | { status: 'committed'; operation: string; result: T }
 export function checkRequest<T = unknown>(key: string) { return api<RequestStatus<T>>(`/api/requests/${encodeURIComponent(key)}`) }
 type MutationInput = { path: string; method?: string; body?: Record<string, unknown>; idempotent?: boolean; timeoutMs?: number }
@@ -21,7 +21,7 @@ export function useMutation() {
     setKey(requestKey); setPending(true); setError(null)
     const task = api<T>(path, { method, body: idempotent ? { ...body, idempotency_key: requestKey } : body, timeoutMs })
     busy.current = task
-    try { const result = await task; intent.current = null; refreshQueries(); return result }
+    try { const result = await task; intent.current = null; if (path === '/api/session') resetQueries(); else refreshQueries(); return result }
     catch (e) { setError(e as ApiError); throw e }
     finally { busy.current = null; setPending(false) }
   }
