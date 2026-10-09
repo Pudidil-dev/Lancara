@@ -91,7 +91,7 @@ class FileTooLargeError extends AppError {
 }
 
 /** Baca unggahan secara terbatas sebelum parser multipart; tanpa write filesystem. */
-export async function readFile(req: NextRequest, { maxBytes }: { maxBytes: number }): Promise<{ name: string; bytes: Uint8Array }> {
+export async function readFile(req: NextRequest, { maxBytes }: { maxBytes: number }): Promise<{ name: string; bytes: Uint8Array; fields: Record<string, string> }> {
   if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0 || maxBytes > 4 * 1024 * 1024) {
     throw new AppError('VALIDATION_ERROR', 'Batas unggahan harus antara 1 byte dan 4 MB.')
   }
@@ -137,7 +137,13 @@ export async function readFile(req: NextRequest, { maxBytes }: { maxBytes: numbe
   if (file.size > maxBytes) throw new FileTooLargeError(maxBytes)
   const name = file.name.replace(/\\/g, '/').split('/').pop()!.replace(/[\u0000-\u001f\u007f-\u009f]/g, '').slice(0, 200).trim()
   if (!name || name === '.' || name === '..') throw new AppError('VALIDATION_ERROR', 'Nama berkas tidak valid.')
-  return { name, bytes: new Uint8Array(await file.arrayBuffer()) }
+  // Field teks lain (mis. rentang halaman, pengaturan) dibatasi jumlah dan panjangnya; validasi isi di pemanggil.
+  const fields: Record<string, string> = {}
+  for (const [key, value] of form.entries()) {
+    if (key === 'file' || typeof value !== 'string' || Object.keys(fields).length >= 10) continue
+    fields[key.slice(0, 40)] = value.slice(0, 2000)
+  }
+  return { name, bytes: new Uint8Array(await file.arrayBuffer()), fields }
 }
 
 export async function body<T>(req: NextRequest, schema: z.ZodType<T>): Promise<T> {
