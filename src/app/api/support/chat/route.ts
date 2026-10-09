@@ -4,10 +4,12 @@ import { requireSession } from '@/lib/session'
 import { answerSupport, MAX_MESSAGE } from '@/modules/support/service'
 
 export const dynamic = 'force-dynamic'
+// Loop tool bisa beberapa putaran model; batas durasi fungsi serverless dinaikkan agar tidak terpotong.
+export const maxDuration = 120
 
 const Input = z.object({
   message: z.string().trim().min(1).max(MAX_MESSAGE),
-  history: z.array(z.object({ role: z.enum(['user', 'assistant']), text: z.string().max(MAX_MESSAGE) })).max(4).optional(),
+  history: z.array(z.object({ role: z.enum(['user', 'assistant']), text: z.string().max(MAX_MESSAGE) })).max(6).optional(),
 })
 
 export const POST = route(

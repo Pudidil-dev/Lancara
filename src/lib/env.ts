@@ -5,6 +5,8 @@ const EnvSchema = z.object({
   SESSION_SECRET: z.string().min(32, 'SESSION_SECRET minimal 32 karakter'),
   AI_PROVIDER: z.enum(['rule', 'anthropic', 'openai-compatible']).default('rule'),
   AI_MODEL: z.string().default('claude-opus-5-5'),
+  // Nilai auto lama tetap terbaca; tool selalu preview dan menunggu konfirmasi website.
+  AGENT_AUTONOMY: z.enum(['auto', 'confirm']).default('confirm'),
   ANTHROPIC_API_KEY: z.string().optional(),
   OPENAI_BASE_URL: z.url().refine((value) => ['http:', 'https:'].includes(new URL(value).protocol), 'OPENAI_BASE_URL harus http atau https').optional(),
   OPENAI_API_KEY: z.string().optional(),

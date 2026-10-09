@@ -1,4 +1,6 @@
-// Panduan bantuan berbasis aturan (jalur utama dan fallback saat AI tidak tersedia).
+import { PRODUCT_NAME } from '@/lib/brand'
+
+// Panduan berbasis aturan (jalur utama dan fallback saat AI tidak tersedia).
 // Fungsi ini murni: hanya mengembalikan teks dan tautan halaman. Tidak pernah mengubah data.
 
 export type SupportCapability = 'coordinator' | 'crew'
@@ -13,9 +15,7 @@ interface Entry {
 }
 
 export const FALLBACK_ANSWER =
-  'Saya hanya bisa membantu memakai Ripple. Coba tanya: "Bagaimana cara melapor perubahan?", "Kenapa tidak ada opsi?", atau "Siapa yang bisa menyetujui?".'
-
-const isCoordinator = (who: Who) => who.capability === 'coordinator'
+  'Model belum tersedia untuk menjawab pesan ini. Coba lagi sebentar; Anda tetap dapat memakai menu website.'
 
 // Urutan penting: entri pertama yang cocok yang dipakai.
 const ENTRIES: Entry[] = [
@@ -26,15 +26,13 @@ const ENTRIES: Entry[] = [
   },
   {
     keys: ['setuju', 'approve', 'persetujuan', 'menyetujui', 'disetujui'],
-    answer: (who) => isCoordinator(who)
-      ? 'Pilih opsi di halaman perubahan, isi alasan, lalu setujui. Sistem memeriksa ulang versi dan batas sebelum menyimpan. Jika rundown sudah berubah, opsi harus dihitung ulang.'
-      : 'Persetujuan dilakukan koordinator. Sebagai kru, Anda menerima brief yang relevan di Inbox.',
-    suggestions: (who) => [isCoordinator(who) ? { label: 'Riwayat', href: '/history' } : { label: 'Inbox', href: '/inbox' }],
+    answer: () => 'Pilih opsi di halaman perubahan, isi alasan, lalu setujui. Sistem memeriksa ulang versi dan batas sebelum menyimpan. Jika rundown sudah berubah, opsi harus dihitung ulang.',
+    suggestions: () => [{ label: 'Riwayat', href: '/history' }],
   },
   {
     keys: ['tidak ada opsi', 'tidak feasible', 'feasible', 'tidak muncul', 'kenapa tidak', 'opsi kosong'],
     answer: () => 'Tidak ada opsi berarti tidak ditemukan kombinasi yang lolos semua batas tercatat, misalnya jam selesai acara atau slot tetap, dalam pencarian terbatas. Itu bukan bukti bahwa tidak ada jadwal lain. Periksa batas di Pengaturan atau coba waktu lain.',
-    suggestions: (who) => [isCoordinator(who) ? { label: 'Pengaturan batas', href: '/rundown/setup' } : { label: 'Rundown', href: '/rundown' }],
+    suggestions: () => [{ label: 'Pengaturan batas', href: '/rundown/setup' }],
   },
   {
     keys: ['terkunci', 'berlangsung', 'status', 'selesai'],
@@ -43,15 +41,13 @@ const ENTRIES: Entry[] = [
   },
   {
     keys: ['brief', 'inbox', 'sudah dibaca', 'dibaca', 'konfirmasi'],
-    answer: () => 'Brief muncul di Inbox sesuai peran Anda. Tekan "Sudah dibaca" setelah membacanya. Itu hanya tanda sudah membaca, bukan tanda bahwa aksi di lapangan sudah dilakukan.',
+    answer: () => 'Seluruh brief acara muncul di Inbox. Tekan "Sudah dibaca" setelah membacanya. Itu hanya tanda sudah membaca, bukan tanda bahwa aksi di lapangan sudah dilakukan.',
     suggestions: () => [{ label: 'Inbox', href: '/inbox' }],
   },
   {
     keys: ['riwayat', 'versi', 'history', 'keputusan'],
-    answer: (who) => isCoordinator(who)
-      ? 'Riwayat menampilkan keputusan, versi rundown, dan status baca brief per peran.'
-      : 'Riwayat hanya dapat dibuka koordinator. Anda dapat melihat brief yang relevan di Inbox.',
-    suggestions: (who) => [isCoordinator(who) ? { label: 'Riwayat', href: '/history' } : { label: 'Inbox', href: '/inbox' }],
+    answer: () => 'Riwayat menampilkan keputusan, versi rundown, dan status baca seluruh brief acara.',
+    suggestions: () => [{ label: 'Riwayat', href: '/history' }],
   },
   {
     keys: ['jam simulasi', 'simulasi', 'reset', 'demo'],
@@ -60,17 +56,24 @@ const ENTRIES: Entry[] = [
   },
   {
     keys: ['login', 'masuk', 'akun', 'peran', 'keluar', 'logout'],
-    answer: () => 'Ini simulasi peran demo, bukan login akun asli. Untuk ganti peran, tekan Keluar di sidebar lalu pilih peran lain.',
+    answer: () => 'LANCARA memakai satu akun utama dengan akses penuh koordinator. Masuk menggunakan akun tersebut; semua menu dan tools tersedia. Perubahan melalui AI Agent tetap menunggu konfirmasi.',
     suggestions: () => [],
   },
   {
     keys: ['rundown', 'jadwal', 'setup', 'pengaturan', 'edit', 'ubah item', 'urutan'],
-    answer: (who) => isCoordinator(who)
-      ? 'Di Pengaturan, Anda dapat mengubah item, jam, durasi, PIC, dependensi, dan batas. Setiap simpan menjadi versi baru.'
-      : 'Kru hanya dapat melihat rundown. Perubahan dilakukan lewat Kabar baru.',
-    suggestions: (who) => [isCoordinator(who) ? { label: 'Pengaturan', href: '/rundown/setup' } : { label: 'Rundown', href: '/rundown' }],
+    answer: () => 'Di Pengaturan, Anda dapat mengubah item, jam, durasi, PIC, dependensi, dan batas. Setiap simpan menjadi versi baru.',
+    suggestions: () => [{ label: 'Pengaturan', href: '/rundown/setup' }],
   },
 ]
+
+/** Fakta cara kerja LANCARA untuk dikirim ke model sebagai PANDUAN (data), dari sumber yang sama dengan jawaban aturan. */
+export function groundingFacts(): string {
+  const lines = new Set<string>()
+  for (const entry of ENTRIES) {
+    lines.add(`- ${entry.answer({ capability: 'coordinator' })} (koordinator)`)
+  }
+  return [...lines].join('\n')
+}
 
 const GREETING = /^(halo|hai|hi|hello|selamat (pagi|siang|sore|malam))\b/
 
@@ -81,7 +84,7 @@ function normalize(text: string): string {
 /** Jawaban berbasis aturan. Fungsi murni: tidak menyentuh database dan tidak memiliki efek samping. */
 export function ruleAnswer(text: string, who: Who): RuleReply {
   const t = normalize(text)
-  if (GREETING.test(t)) return { answer: 'Halo. Ada yang bisa saya bantu tentang Ripple?', suggestions: [] }
+  if (GREETING.test(t)) return { answer: `Halo. Ada yang bisa saya bantu tentang ${PRODUCT_NAME}?`, suggestions: [] }
   const entry = ENTRIES.find((e) => e.keys.some((k) => t.includes(k)))
   if (!entry) return { answer: FALLBACK_ANSWER, suggestions: [] }
   return { answer: entry.answer(who), suggestions: entry.suggestions(who) }
