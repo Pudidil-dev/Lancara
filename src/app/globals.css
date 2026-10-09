@@ -1,5 +1,5 @@
 /*
- * Design system Ripple — sumber: Figma "PENS-Hackathon" (file Mnn6RHGo0ubSuEKDXebAxk), halaman "Design System".
+ * Design system LANCARA — sumber: Figma "PENS-Hackathon" (file Mnn6RHGo0ubSuEKDXebAxk), halaman "Design System".
  * Token --ripple-* mengikuti variabel Figma. Token --color-* / --space-* / --fs-* dipertahankan sebagai alias
  * agar komponen yang sudah ada tidak perlu diubah. Semua halaman memakai variabel ini, bukan nilai lokal.
  */
@@ -1383,7 +1383,7 @@ fieldset > legend {
   color: var(--ripple-muted);
 }
 
-/* ---------- Asisten bantuan (pojok kanan bawah) ---------- */
+/* ---------- AI Agent LANCARA (pojok kanan bawah) ---------- */
 .support-root {
   position: fixed;
   right: var(--space-16);
@@ -1526,4 +1526,65 @@ fieldset > legend {
   .page-content {
     padding-bottom: 96px;
   }
+}
+.support-thinking {
+  margin-bottom: var(--space-8);
+  color: var(--ripple-muted);
+  font-size: var(--fs-12);
+  line-height: 18px;
+}
+.support-thinking summary {
+  min-height: 0;
+  padding: 0;
+}
+.support-thinking p {
+  font-size: var(--fs-12);
+  line-height: 18px;
+  margin-top: var(--space-4);
+}
+.support-steps {
+  list-style: none;
+  margin: 0 0 var(--space-8);
+  padding: 0;
+  color: var(--ripple-muted);
+  font-size: var(--fs-12);
+  line-height: 18px;
+}
+.support-steps li[data-ok='false'] {
+  color: var(--ripple-warning);
+}
+
+/* ---------- AI Agent: pratinjau dan konfirmasi rundown ---------- */
+.agent-preview {
+  margin-top: var(--space-12);
+  padding-top: var(--space-12);
+  border-top: 1px solid var(--ripple-line);
+  min-width: 0;
+}
+.agent-preview-diff {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-12);
+}
+.agent-preview-diff > li {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding: var(--space-8);
+  border: 1px solid var(--ripple-line);
+  border-radius: var(--radius-card);
+}
+.agent-preview .field select,
+.agent-preview .btn {
+  max-width: 100%;
+}
+.agent-preview .btn {
+  white-space: normal;
+}
+.agent-preview-diff .time-diff {
+  flex-wrap: wrap;
+}
+.support-panel[hidden] {
+  display: none;
 }

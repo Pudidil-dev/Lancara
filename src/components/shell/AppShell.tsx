@@ -12,7 +12,7 @@ import { ErrorState, Icon, Loading, type IconName } from '@/components/ui'
 import { Brand } from './Brand'
 import { PRODUCT_NAME } from '@/lib/brand'
 import { PageHeaderContext } from './PageHeader'
-import { SupportChat } from '@/components/support/SupportChat'
+import { AgentChat } from '@/components/agent/AgentChat'
 
 interface NavLink {
   href: string
@@ -95,7 +95,7 @@ export function AppShell({ children, title, description, actions }: { children: 
             <div className="page-title-actions" ref={setActionsSlot}>{actions}</div>
           </div>
           <PageHeaderContext.Provider value={slots}>{children}</PageHeaderContext.Provider>
-          <SupportChat />
+          <AgentChat />
         </main>
       </div>
     </div>
