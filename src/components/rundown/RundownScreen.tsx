@@ -146,7 +146,7 @@ export function RundownScreen() {
   async function saveOrder() {
     if (!proposal) return
     try {
-      const result = await mutation.mutate<{ new_version: number }>({ path: `/api/events/${EVENT_ID}/setup`, method: 'PUT', body: { base_version: version, snapshot: proposal.snapshot, note: 'Urutan rundown diubah dari dashboard' } })
+      const result = await mutation.mutate<{ new_version: number }>({ path: `/api/events/${EVENT_ID}/setup`, method: 'PUT', body: { base_version: version, snapshot: proposal.snapshot, origin: 'reorder', note: 'Urutan rundown diubah dari dashboard' } })
       setProposal(null)
       setNotice(`Urutan disimpan · Rundown v${result.new_version}.`)
     } catch { /* Error ditampilkan di dialog. */ }

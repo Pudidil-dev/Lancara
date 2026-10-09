@@ -144,7 +144,7 @@ export async function applyImport(session: Session, eventId: string, importId: s
   const snapshot = buildSnapshot(record.draft.rows, record.settings, base, localDate(anchor, base.event.timezone))
   const { errors } = validateSnapshot(snapshot)
   if (errors.length) throw new AppError('VALIDATION_ERROR', 'Rundown belum bisa diaktifkan: perbaiki data berikut.', errors)
-  const result = await saveSetup(session, eventId, { base_version: input.base_version, snapshot, idempotency_key: input.idempotency_key, note: `Impor PDF ${record.draft.source.filename}`.slice(0, 200) })
+  const result = await saveSetup(session, eventId, { base_version: input.base_version, snapshot, idempotency_key: input.idempotency_key, origin: 'import', import_filename: record.draft.source.filename, note: `Impor PDF ${record.draft.source.filename}`.slice(0, 200) })
   await query(`UPDATE rundown_imports SET status = 'applied', applied_version = $3, updated_at = now() WHERE id = $1 AND event_id = $2 AND status = 'draft'`, [importId, eventId, result.new_version])
   log('info', 'import_applied', { import_id: importId, version: result.new_version, items: snapshot.items.length })
   return { new_version: result.new_version, import_id: importId, replayed: result.replayed }

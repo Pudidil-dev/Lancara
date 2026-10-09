@@ -21,7 +21,10 @@
     "db:local": "node scripts/pg-local.mjs",
     "bench": "tsx scripts/bench-engine.ts",
     "eval:parser": "tsx scripts/eval-parser.ts",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "telegram:webhook": "tsx scripts/telegram-webhook.ts",
+    "telegram:poll": "tsx scripts/telegram-poll.ts",
+    "notifier:drain": "tsx scripts/notifier-drain.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.132.1",

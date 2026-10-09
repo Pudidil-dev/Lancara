@@ -22,7 +22,7 @@ export function EventSettingsScreen() {
     if (!settings || settingsError(settings)) return
     setNotice('')
     try {
-      const result = await save.mutate<{ new_version: number }>({ path: `/api/events/${EVENT_ID}/setup`, method: 'PUT', body: { base_version: data.version, snapshot: applySettings(data.snapshot, settings), note: 'Pengaturan acara diperbarui' } })
+      const result = await save.mutate<{ new_version: number }>({ path: `/api/events/${EVENT_ID}/setup`, method: 'PUT', body: { base_version: data.version, snapshot: applySettings(data.snapshot, settings), origin: 'settings', note: 'Pengaturan acara diperbarui' } })
       setNotice(`Pengaturan tersimpan · Rundown v${result.new_version}.`)
     } catch { /* Error ditampilkan di bawah. */ }
   }

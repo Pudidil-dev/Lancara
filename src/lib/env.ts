@@ -22,10 +22,14 @@ const EnvSchema = z.object({
   TELEGRAM_BOT_TOKEN: z.string().min(1).optional(),
   TELEGRAM_WEBHOOK_SECRET: z.string().min(24).max(256).regex(/^[A-Za-z0-9_-]+$/, 'Secret webhook hanya boleh berisi huruf, angka, _ dan -').optional(),
   TELEGRAM_BOT_USERNAME: z.string().min(5).max(32).regex(/^[A-Za-z][A-Za-z0-9_]+$/, 'Username bot tanpa @ atau URL').optional(),
+  NOTIFIER_CRON_SECRET: z.string().min(32).max(256).regex(/^[A-Za-z0-9_-]+$/).optional(),
+  NOTIFIER_SUMMARY_MODEL: z.string().min(1).default('claude-haiku-5-5'),
+  NOTIFIER_LLM_TIMEOUT_MS: z.coerce.number().int().min(1).max(8000).default(8000),
+  NOTIFIER_MAX_AGE_MIN: z.coerce.number().int().positive().default(120),
 }).superRefine((value, ctx) => {
   if (value.AGENT_MAX_OUTPUT_TOKENS >= value.AGENT_CONTEXT_TOKENS) ctx.addIssue({ code: 'custom', path: ['AGENT_MAX_OUTPUT_TOKENS'], message: 'Output harus lebih kecil dari context agar input dan tool punya ruang.' })
   if (!value.TELEGRAM_ENABLED) return
-  for (const key of ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_WEBHOOK_SECRET', 'TELEGRAM_BOT_USERNAME'] as const) {
+  for (const key of ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_WEBHOOK_SECRET', 'TELEGRAM_BOT_USERNAME', 'NOTIFIER_CRON_SECRET'] as const) {
     if (!value[key]) ctx.addIssue({ code: 'custom', path: [key], message: `${key} wajib diisi bila TELEGRAM_ENABLED=true` })
   }
 })
@@ -49,6 +53,10 @@ export function env(): Env {
     TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || undefined,
     TELEGRAM_WEBHOOK_SECRET: process.env.TELEGRAM_WEBHOOK_SECRET || undefined,
     TELEGRAM_BOT_USERNAME: process.env.TELEGRAM_BOT_USERNAME || undefined,
+    NOTIFIER_CRON_SECRET: process.env.NOTIFIER_CRON_SECRET || undefined,
+    NOTIFIER_SUMMARY_MODEL: process.env.NOTIFIER_SUMMARY_MODEL || undefined,
+    NOTIFIER_LLM_TIMEOUT_MS: process.env.NOTIFIER_LLM_TIMEOUT_MS || undefined,
+    NOTIFIER_MAX_AGE_MIN: process.env.NOTIFIER_MAX_AGE_MIN || undefined,
   })
   if (!parsed.success) {
     throw new Error(`Konfigurasi environment tidak valid: ${parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ')}`)

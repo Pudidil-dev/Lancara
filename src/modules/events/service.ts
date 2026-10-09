@@ -9,6 +9,8 @@ import { sortByStart } from '@/modules/engine/schedule'
 import type { ItemStatus, Snapshot } from '@/modules/engine/types'
 import { validateSnapshot } from '@/modules/engine/validate'
 import { normalizeIso } from '@/lib/time'
+import { enqueueVersionNotification } from '@/modules/notifier/outbox'
+import type { NotificationOrigin } from '@/modules/notifier/types'
 import { seedDemo } from './seed'
 
 export interface EventRow {
@@ -86,7 +88,7 @@ export async function getRundown(session: Session, eventId: string) {
   }
 }
 
-export async function saveSetup(session: Session, eventId: string, input: { base_version: number; snapshot: Snapshot; idempotency_key: string; note?: string }) {
+export async function saveSetup(session: Session, eventId: string, input: { base_version: number; snapshot: Snapshot; idempotency_key: string; note?: string; origin?: Exclude<NotificationOrigin, 'decision'>; import_filename?: string }) {
   requireEvent(session, eventId)
   requireCoordinator(session)
   const snapshot = normalizeSnapshot({ ...input.snapshot, event: { ...input.snapshot.event, id: eventId } })
@@ -96,12 +98,21 @@ export async function saveSetup(session: Session, eventId: string, input: { base
     idempotent(client, { eventId, actorId: session.actor_id, operation: 'setup', key: input.idempotency_key, payload: input }, async () => {
       const event = await getEvent(eventId, client, 'FOR UPDATE')
       assertBase(event, input.base_version)
+      const base = await getSnapshot(eventId, event.active_version, client)
       const roles = await query<{ id: string; label: string }>('SELECT id, label FROM roles WHERE event_id = $1 ORDER BY id', [eventId], client)
       const known = new Set(roles.map((r) => r.id))
       const unknown = snapshot.roles.filter((r) => !known.has(r.id))
       if (unknown.length) throw new AppError('VALIDATION_ERROR', `Peran ${unknown.map((r) => r.id).join(', ')} belum terdaftar pada event.`)
       await client.query('UPDATE events SET name = $2, timezone = $3 WHERE id = $1', [eventId, snapshot.event.name, snapshot.event.timezone])
       const newVersion = await insertVersion(client, event, snapshot, 'setup', session.actor_id, input.note ?? 'Perubahan setup')
+      const origin = input.origin ?? 'manual_edit'
+      // Label settings dari client tidak boleh menyembunyikan perubahan jadwal.
+      const hasItemChanges = JSON.stringify(base.items) !== JSON.stringify(snapshot.items)
+      const effectiveOrigin = origin === 'settings' && hasItemChanges ? 'manual_edit' : origin
+      const changedSettings = (['name', 'timezone', 'curfew_at'] as const).some(field => base.event[field] !== snapshot.event[field])
+      if (effectiveOrigin !== 'settings' || changedSettings) {
+        await enqueueVersionNotification(client, { base, proposed: snapshot, version: newVersion, baseVersion: input.base_version, session, origin: effectiveOrigin, importFilename: input.import_filename })
+      }
       return { new_version: newVersion }
     }),
   )

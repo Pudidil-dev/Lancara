@@ -7,7 +7,8 @@ import { requireCoordinator, requireEvent, type Session } from '@/lib/session'
 import { renderBrief, type BriefPayload } from '@/modules/briefs/render'
 import { loadChange } from '@/modules/changes/service'
 import { revalidate } from '@/modules/engine/analyze'
-import type { Delta, RoleImpact, Snapshot } from '@/modules/engine/types'
+import type { Delta, ItemDiff, RoleImpact, Snapshot } from '@/modules/engine/types'
+import { enqueueVersionNotification } from '@/modules/notifier/outbox'
 import { getEvent, getSnapshot, insertVersion } from '@/modules/events/service'
 
 interface PatchRow {
@@ -17,6 +18,7 @@ interface PatchRow {
   base_version: number
   proposed_snapshot: Snapshot
   impact: RoleImpact[]
+  diff: ItemDiff[]
   label: string
 }
 
@@ -45,7 +47,7 @@ export async function approve(session: Session, changeId: string, input: Approve
         throw new AppError('STALE_VERSION', `Rundown sudah berubah ke v${event.active_version}. Hitung ulang dari versi terkini.`, { active_version: event.active_version })
       }
       const latest = await client.query<{ id: string }>('SELECT id FROM analyses WHERE change_id = $1 ORDER BY created_at DESC LIMIT 1', [changeId])
-      const patchRes = await client.query<PatchRow>('SELECT id, analysis_id, change_id, base_version, proposed_snapshot, impact, label FROM patches WHERE id = $1 AND change_id = $2', [
+      const patchRes = await client.query<PatchRow>('SELECT id, analysis_id, change_id, base_version, proposed_snapshot, impact, diff, label FROM patches WHERE id = $1 AND change_id = $2', [
         input.patch_id,
         changeId,
       ])
@@ -74,6 +76,13 @@ export async function approve(session: Session, changeId: string, input: Approve
         [change.event_id, change.id, patch.id, session.actor_id, input.reason, input.base_version, newVersion],
       )
       const decisionId = decision.rows[0].id
+
+      await enqueueVersionNotification(client, {
+        base: active, proposed: patch.proposed_snapshot, version: newVersion, baseVersion: input.base_version,
+        session, origin: 'decision', diff: patch.diff, impact: patch.impact,
+        committedAt: decision.rows[0].approved_at.toISOString(),
+        decision: { decision_id: decisionId, change_seq: Number(change.seq), kind: change.kind, patch_label: patch.label, reason: input.reason },
+      })
 
       let briefCount = 0
       for (const role of patch.impact) {

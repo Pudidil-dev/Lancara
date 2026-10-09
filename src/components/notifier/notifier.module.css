@@ -1,0 +1,146 @@
+.section {
+  display: grid;
+  gap: var(--space-20);
+  min-width: 0;
+  font-family: var(--font-family);
+}
+
+.header,
+.actions,
+.identity {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-12);
+}
+
+.header {
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.header h2,
+.header h3,
+.section p,
+.section h3 {
+  margin: 0;
+}
+
+.copy {
+  display: grid;
+  gap: var(--space-8);
+  min-width: 0;
+}
+
+.muted,
+.metadata {
+  color: var(--ripple-muted);
+  font-size: var(--fs-12);
+}
+
+.subsection {
+  display: grid;
+  gap: var(--space-16);
+  min-width: 0;
+  border-top: 1px solid var(--ripple-line);
+  padding-top: var(--space-20);
+}
+
+.list,
+.group,
+.version,
+.delivery,
+.linkBox {
+  display: grid;
+  gap: var(--space-16);
+  min-width: 0;
+}
+
+.group,
+.version,
+.linkBox {
+  padding: var(--space-16);
+  border: 1px solid var(--ripple-line);
+  border-radius: var(--radius-control);
+}
+
+.groupFields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-16);
+}
+
+.roleFields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8) var(--space-20);
+  padding: 0;
+  border: 0;
+  margin: 0;
+}
+
+.roleFields legend {
+  margin-bottom: var(--space-12);
+  font-weight: 600;
+}
+
+.linkRow {
+  display: flex;
+  gap: var(--space-8);
+  flex-wrap: wrap;
+}
+
+.linkRow input {
+  flex: 1 1 0;
+  min-width: 0;
+  border-color: var(--ripple-fieldBorder);
+}
+
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-8);
+  color: var(--ripple-success);
+}
+
+.notice:empty {
+  display: none;
+}
+
+.delivery + .delivery {
+  border-top: 1px solid var(--ripple-line);
+  padding-top: var(--space-16);
+}
+
+.metadata {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4) var(--space-12);
+}
+
+.summary {
+  overflow-wrap: anywhere;
+}
+
+.dialog {
+  display: grid;
+  gap: var(--space-16);
+  min-width: 0;
+}
+
+@media (max-width: 640px) {
+  .groupFields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .linkRow input {
+    flex-basis: 100%;
+  }
+
+  .header > .actions,
+  .actions > button,
+  .actions > a {
+    flex: 1 1 auto;
+  }
+}
