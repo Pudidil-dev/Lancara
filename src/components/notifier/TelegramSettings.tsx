@@ -33,6 +33,7 @@ const STATUS: Record<string, { text: string; tone: string; icon: IconName }> = {
   revoked: { text: 'Dicabut', tone: 'neutral', icon: 'lock' },
   bot_removed: { text: 'Bot dikeluarkan', tone: 'danger', icon: 'alert' },
   ready: { text: 'Siap dikirim', tone: 'brand', icon: 'send' },
+  queued: { text: 'Dalam antrean', tone: 'neutral', icon: 'clock' },
   done: { text: 'Selesai', tone: 'success', icon: 'check' },
   expired: { text: 'Kedaluwarsa', tone: 'neutral', icon: 'timer-off' },
   sending: { text: 'Mengirim', tone: 'brand', icon: 'send' },

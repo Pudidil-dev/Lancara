@@ -109,7 +109,7 @@ export function NotificationLog() {
       {entry.deliveries.length === 0 && <p className={styles.muted}>{entry.status === 'expired' ? 'Notifikasi melewati batas waktu pengiriman.' : entry.status === 'done' ? 'Tidak ada grup yang disetujui saat notifikasi diproses.' : 'Pengiriman belum disiapkan.'}</p>}
       {entry.deliveries.map((delivery) => <div className={styles.delivery} key={delivery.id} aria-label={`Pengiriman ke ${delivery.group_title || 'grup Telegram'}`}>
         <div className={styles.header}><strong>{delivery.group_title || 'Grup Telegram'}</strong><NotifierStatus status={delivery.status} /></div>
-        <div className={styles.metadata}><span>{delivery.attempts} percobaan</span>{delivery.error_code && <span>Kode kegagalan: {delivery.error_code}</span>}{delivery.sent_at && <span>Diterima {notifierTime(delivery.sent_at, timezone)}</span>}{delivery.telegram_message_id != null && <span>ID pesan: {delivery.telegram_message_id}</span>}</div>
+        <div className={styles.metadata}><span>{delivery.attempts} percobaan</span>{delivery.error_code === 'manually_confirmed' ? <span><Icon name="check" /> Dikonfirmasi manual</span> : delivery.error_code && <span>Kode kegagalan: {delivery.error_code}</span>}{delivery.sent_at && <span>{delivery.error_code === 'manually_confirmed' ? 'Dikonfirmasi' : 'Diterima'} {notifierTime(delivery.sent_at, timezone)}</span>}{delivery.telegram_message_id != null && <span>ID pesan: {delivery.telegram_message_id}</span>}</div>
         <DeliveryActions delivery={delivery} refresh={query.refresh} />
       </div>)}
     </article>)}</div>
