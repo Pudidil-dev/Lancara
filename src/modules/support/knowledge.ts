@@ -41,8 +41,8 @@ const ENTRIES: Entry[] = [
   },
   {
     keys: ['brief', 'inbox', 'sudah dibaca', 'dibaca', 'konfirmasi'],
-    answer: () => 'Seluruh brief acara muncul di Konfirmasi perubahan. Tekan "Sudah dibaca" setelah membacanya. Itu hanya tanda sudah membaca, bukan tanda bahwa aksi di lapangan sudah dilakukan.',
-    suggestions: () => [{ label: 'Konfirmasi perubahan', href: '/inbox' }],
+    answer: () => 'Seluruh brief acara muncul di Perubahan Langsung. Tekan "Sudah dibaca" setelah membacanya. Itu hanya tanda sudah membaca, bukan tanda bahwa aksi di lapangan sudah dilakukan.',
+    suggestions: () => [{ label: 'Perubahan Langsung', href: '/inbox' }],
   },
   {
     keys: ['riwayat', 'versi', 'history', 'keputusan'],

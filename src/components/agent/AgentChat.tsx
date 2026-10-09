@@ -1,12 +1,13 @@
 'use client'
 import Link from 'next/link'
 import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
-import { ApiError } from '@/lib/api-client'
+import { userErrorMessage } from '@/lib/error-feedback'
+import { notifyError } from '@/lib/notifications'
 import { streamAgent, type AgentStreamEvent } from '@/lib/agent-stream'
 import { refreshQueries } from '@/hooks/usePolling'
 import { useOnline } from '@/hooks/useOnline'
 import { useSession } from '@/hooks/useSession'
-import { Icon } from '@/components/ui'
+import { Icon , Button, Label, Input, Textarea } from '@/components/ui'
 import { SchedulePreview, type ScheduleProposal } from './SchedulePreview'
 import { chatHistory, compactChat, readChatMemory, writeChatMemory, type ChatMessage as Message } from './chat-memory'
 import { MAX_MESSAGE, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, type AgentAttachment } from '@/modules/support/limits'
@@ -44,7 +45,7 @@ const TOOL_LABEL: Record<string, string> = {
 const clock = () => new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false }).replace(':', '.')
 
 function StepList({ steps, label }: { steps: Step[]; label: string }) {
-  return <ul className="support-steps" aria-label={label}>{steps.map((s, i) => <li key={i} data-ok={s.running ? undefined : s.ok}>{s.running ? '…' : s.ok ? '✓' : '!'} {TOOL_LABEL[s.tool] ?? s.tool}{!s.ok && s.note ? ` — ${s.note}` : ''}</li>)}</ul>
+  return <ul className="support-steps" aria-label={label}>{steps.map((s, i) => <li key={i} data-ok={s.running ? undefined : s.ok}>{s.running ? '…' : s.ok ? '✓' : '!'} {TOOL_LABEL[s.tool] ?? 'Memproses permintaan'}{!s.ok ? ' — Langkah ini belum dapat dilanjutkan. Periksa rincian perubahan.' : ''}</li>)}</ul>
 }
 
 /** Panel "Lancara Support · AI Assistant" (Figma Dashboard 159:6742): membaca konteks dan bertindak lewat tool website. */
@@ -61,27 +62,28 @@ export function AgentChat() {
   const logRef = useRef<HTMLDivElement>(null)
   const online = useOnline()
   const { session } = useSession()
+  const chatScope = session ? `${session.session_id}:${session.event_id}` : null
   const activeSession = useRef<string | null>(null)
-  activeSession.current = session?.session_id ?? null
+  activeSession.current = chatScope
   const uid = useId()
 
   // Jam sapaan diisi di klien agar tidak berbeda dengan render server.
   useEffect(() => { setMessages((prev) => prev.map((m) => (m.id === 0 && !m.at ? { ...m, at: clock() } : m))) }, [])
   useEffect(() => { logRef.current?.scrollTo({ top: logRef.current.scrollHeight }) }, [messages, pending, live])
   useEffect(() => {
-    if (!session?.session_id) { setMemorySession(null); return }
+    if (!chatScope) { setMemorySession(null); return }
     let restored: Message[] | null = null
-    try { restored = readChatMemory(sessionStorage, session.session_id) } catch { /* Penyimpanan tab opsional. */ }
+    try { restored = readChatMemory(sessionStorage, chatScope) } catch { /* Penyimpanan tab opsional. */ }
     setMessages(restored?.length ? restored : [{ id: 0, role: 'assistant', text: GREETING, at: clock() }])
     nextId.current = restored?.length ? Math.max(...restored.map(m => m.id)) + 1 : 1
     setPending(false); setLive(null); setUploads([]); setDraft('')
-    setMemorySession(session.session_id)
-  }, [session?.session_id])
+    setMemorySession(chatScope)
+  }, [chatScope])
   useEffect(() => {
-    if (session?.session_id && memorySession === session.session_id) {
-      try { writeChatMemory(sessionStorage, session.session_id, messages) } catch { /* Penyimpanan tab opsional. */ }
+    if (chatScope && memorySession === chatScope) {
+      try { writeChatMemory(sessionStorage, chatScope, messages) } catch { /* Penyimpanan tab opsional. */ }
     }
-  }, [messages, memorySession, session?.session_id])
+  }, [messages, memorySession, chatScope])
 
   async function attach(files: FileList | null) {
     if (!files) return
@@ -98,7 +100,7 @@ export function AgentChat() {
         reader.readAsDataURL(file)
       })))
       setUploads(values)
-    } catch (error) { setFileError((error as Error).message) }
+    } catch (error) { setFileError(error instanceof Error && ['Format lampiran harus PNG, JPG, WebP, atau PDF.', 'Lampiran tidak dapat dibaca.'].includes(error.message) ? error.message : 'Lampiran belum dapat dibaca. Coba pilih kembali berkasnya.') }
     finally { if (fileRef.current) fileRef.current.value = '' }
   }
 
@@ -125,7 +127,8 @@ export function AgentChat() {
       if (reply.proposals?.some((p) => p.applied)) refreshQueries()
     } catch (error) {
       if (activeSession.current !== requestSession) return
-      const message = error instanceof ApiError && ['RATE_LIMITED', 'VALIDATION_ERROR'].includes(error.code) ? error.message : 'AI belum dapat menyelesaikan tugas sekarang. Coba lagi sebentar.'
+      const message = userErrorMessage(error, 'chat')
+      notifyError(error, { id: 'agent-chat', context: 'chat' })
       setMessages((prev) => [...prev, { id: nextId.current++, role: 'assistant', text: message, at: clock(), error: true }])
     } finally {
       if (activeSession.current === requestSession) { setPending(false); setLive(null) }
@@ -150,11 +153,15 @@ export function AgentChat() {
           {m.reasoning && m.reasoning.length > 0 && <details className="support-thinking"><summary>Ringkasan analisis</summary>{m.reasoning.map((r, i) => <p key={i}>{r}</p>)}</details>}
           {m.steps && m.steps.length > 0 && <StepList steps={m.steps} label="Langkah agen" />}
           <p>{m.text}</p>
+          {m.error && m.id === messages.at(-1)?.id && <Button variant="outline" size="sm" disabled={pending || !online} onClick={() => {
+            const previous = [...messages].reverse().find(message => message.role === 'user')
+            if (previous) { setDraft(previous.text); setUploads(previous.files ?? []) }
+          }}><Icon name="history" />Siapkan pesan kembali</Button>}
           {m.fileNames?.length ? <p className="muted small"><Icon name="file-up" /> {m.fileNames.join(', ')}</p> : null}
           {m.proposals && m.proposals.length > 0 && <div className="stack">{m.proposals.map((p) => p.preview && !p.applied
             ? <SchedulePreview key={p.change_id} proposal={p} canConfirm={!!session} />
-            : <div className="support-links" key={p.change_id}><Link className="btn btn-primary btn-compact" href={p.href}>{p.label}</Link></div>)}</div>}
-          {m.suggestions && m.suggestions.length > 0 && <div className="support-links">{m.suggestions.map((s) => <Link key={s.href} className="btn btn-compact" href={s.href}>{s.label}</Link>)}</div>}
+            : <div className="support-links" key={p.change_id}><Button asChild variant="default"><Link className="btn btn-primary btn-compact" href={p.href}>{p.label}</Link></Button></div>)}</div>}
+          {m.suggestions && m.suggestions.length > 0 && <div className="support-links">{m.suggestions.map((s) => <Button key={s.href} asChild variant="outline"><Link className="btn btn-compact" href={s.href}>{s.label}</Link></Button>)}</div>}
         </div>
         {m.at && <span className="agent-time">{m.at}</span>}
       </div>)}
@@ -169,13 +176,13 @@ export function AgentChat() {
     <div className="agent-foot">
       {!online && <p className="lc-alert" data-tone="warning">Tidak ada koneksi. AI memerlukan server.</p>}
       {fileError && <p className="lc-alert" data-tone="warning" role="alert">{fileError}</p>}
-      {uploads.length > 0 && <div className="row">{uploads.map((file, index) => <button type="button" className="btn btn-compact" key={`${file.name}-${index}`} onClick={() => setUploads(prev => prev.filter((_, i) => i !== index))} aria-label={`Hapus lampiran ${file.name}`}><Icon name="file-up" />{file.name} ×</button>)}</div>}
+      {uploads.length > 0 && <div className="row">{uploads.map((file, index) => <Button variant="outline" type="button" className="btn btn-compact" key={`${file.name}-${index}`} onClick={() => setUploads(prev => prev.filter((_, i) => i !== index))} aria-label={`Hapus lampiran ${file.name}`}><Icon name="file-up" />{file.name} ×</Button>)}</div>}
       <form className="agent-form" onSubmit={(event: FormEvent) => { event.preventDefault(); void send(draft) }}>
-        <label htmlFor={`${uid}-input`} className="sr-only">Pesan untuk AI Assistant</label>
-        <input ref={fileRef} type="file" className="sr-only" accept="image/png,image/jpeg,image/webp,application/pdf" multiple disabled={pending} aria-label="Lampirkan gambar atau PDF" onChange={event => void attach(event.target.files)} />
-        <button type="button" className="btn btn-compact" aria-label="Pilih gambar atau PDF" title="Gambar/PDF, total maksimal 2 MB" disabled={pending || !online} onClick={() => fileRef.current?.click()}><Icon name="file-up" /></button>
-        <textarea id={`${uid}-input`} rows={1} maxLength={MAX_MESSAGE} value={draft} disabled={pending} placeholder="Apa yang mau anda ubah?" onChange={(e) => setDraft(e.target.value)} onKeyDown={onInputKey} />
-        <button type="submit" className="agent-send" aria-label="Kirim pesan" disabled={pending || (!draft.trim() && !uploads.length) || !online}><Icon name="send" size={18} /></button>
+        <Label htmlFor={`${uid}-input`} className="sr-only">Pesan untuk AI Assistant</Label>
+        <Input ref={fileRef} type="file" className="sr-only" accept="image/png,image/jpeg,image/webp,application/pdf" multiple disabled={pending} aria-label="Lampirkan gambar atau PDF" onChange={event => void attach(event.target.files)} />
+        <Button variant="outline" type="button" className="btn btn-compact" aria-label="Pilih gambar atau PDF" title="Gambar/PDF, total maksimal 2 MB" disabled={pending || !online} onClick={() => fileRef.current?.click()}><Icon name="file-up" /></Button>
+        <Textarea id={`${uid}-input`} rows={1} maxLength={MAX_MESSAGE} value={draft} disabled={pending} placeholder="Apa yang mau anda ubah?" onChange={(e) => setDraft(e.target.value)} onKeyDown={onInputKey} />
+        <Button variant="default" size="icon" type="submit" className="agent-send" aria-label="Kirim pesan" disabled={pending || (!draft.trim() && !uploads.length) || !online}><Icon name="send" size={18} /></Button>
       </form>
       <p className="agent-disclaimer">*Mohon periksa kembali, AI bisa keliru.</p>
     </div>

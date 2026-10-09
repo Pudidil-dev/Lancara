@@ -1,5 +1,6 @@
 import { MAX_ATTACHMENT_BYTES, MAX_HISTORY_TEXT, MAX_HISTORY_TURNS, type AgentAttachment } from '@/modules/support/limits'
 import type { ScheduleProposal } from './SchedulePreview'
+import { latestExchange } from '@/modules/support/history'
 
 export const CHAT_MEMORY_PREFIX = 'lancara.agent.chat.'
 export interface ChatMessage {
@@ -17,11 +18,11 @@ export interface ChatMessage {
   error?: boolean
 }
 
-/** Ingatan berisi isi percakapan dan rencana konkret, bukan hanya jawaban generik "preview siap". */
+/** Keep the visible archive, but send only the latest exchange and preview as model memory. */
 export function chatHistory(messages: ChatMessage[]) {
-  return messages.filter(m => !m.error && m.id !== 0).slice(-MAX_HISTORY_TURNS).map(m => ({
+  return latestExchange(messages.filter(m => !m.error && m.id !== 0)).slice(-MAX_HISTORY_TURNS).map(m => ({
     role: m.role,
-    text: (m.text + (m.fileNames?.length ? `\nLampiran: ${m.fileNames.join(', ')}` : '') + (m.proposals?.length ? `\nPratinjau sebelumnya (cek versi server): ${JSON.stringify(m.proposals.map(p => ({ label: p.label, applied: p.applied ?? false, base_version: p.preview?.base_version, diff: p.preview?.diff, candidates: p.preview?.candidates })))}` : '')).slice(0, MAX_HISTORY_TEXT),
+    text: (m.text + (m.fileNames?.length ? `\nLampiran: ${m.fileNames.join(', ')}` : '') + (m.proposals?.length ? `\nPratinjau sebelumnya (cek versi server): ${JSON.stringify(m.proposals.slice(-1).map(p => ({ label: p.label, applied: p.applied ?? false, base_version: p.preview?.base_version, diff: p.preview?.diff })))}` : '')).slice(0, MAX_HISTORY_TEXT),
   }))
 }
 

@@ -2,6 +2,19 @@ import { formatClock, localDate, zoneAbbrev } from '@/lib/time'
 import { endIso, sortByStart } from '@/modules/engine/schedule'
 import type { Snapshot } from '@/modules/engine/types'
 import { itemAliases } from '@/modules/agent/targeting'
+import { diffSnapshots } from '@/modules/engine/impact'
+
+/** The immediately preceding server version is the only source of newly committed changes. */
+export function buildLatestCommit(previous: Snapshot | null, current: Snapshot, version: number) {
+  if (!previous || previous.event.id !== current.event.id || version <= 1) return null
+  return {
+    event_id: current.event.id, base_version: version - 1, version,
+    changes: diffSnapshots(previous, current),
+    config_changes: (['name', 'timezone', 'stage', 'curfew_at'] as const)
+      .filter(field => previous.event[field] !== current.event[field])
+      .map(field => ({ field, old: previous.event[field], new: current.event[field] })),
+  }
+}
 
 /** Hanya data yang aman untuk dikirim ke model: tanpa ID sesi, ID akun, roles, batas, atau secret. */
 export interface SupportContext {

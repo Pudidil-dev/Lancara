@@ -13,11 +13,14 @@ import type { RescheduleRecommendation } from '@/modules/agent/rescheduling'
 import { agentInputBudget, createConversation, runToolAgent, type AgentProgress } from '@/modules/agent/runner'
 import { describeOutcome, executeTool, handleDelta, toolsForCapability, undoDecision, type Proposal } from '@/modules/agent/tools'
 import { getEvent, getSnapshot } from '@/modules/events/service'
-import { buildAgentContext } from './context'
+import { buildAgentContext, buildLatestCommit } from './context'
+import { latestExchange } from './history'
 import { guardRequestedTarget, resolveTargetFocus } from '@/modules/agent/targeting'
 import { groundingFacts, ruleAnswer, type Suggestion } from './knowledge'
 import { MAX_MESSAGE, MAX_HISTORY_TURNS, type AgentAttachment } from './limits'
 import { prepareAttachments } from './attachments'
+import { buildPayload } from '@/modules/notifier/payload'
+import { templateParagraph, validateParagraph } from '@/modules/notifier/summarize'
 
 export { MAX_MESSAGE } from './limits'
 export const SUPPORT_PER_MINUTE = 20
@@ -44,6 +47,7 @@ const RESCHEDULE_PATTERN = /reschedul|rekomendasi|rekomendastion|recommend|susun
  */
 export async function answerSupport(session: Session, message: string, history: SupportTurn[] = [], onEvent?: (event: AgentProgress) => void, attachments: AgentAttachment[] = []): Promise<SupportReply> {
   const text = message.trim()
+  const latestReportRequested = /\b(?:ringkas\w*|rangkum\w*|laporkan)\b/i.test(text) && /\b(?:perubahan|terbaru|terakhir|tadi)\b/i.test(text)
   if (!text || text.length > MAX_MESSAGE) throw new AppError('VALIDATION_ERROR', `Pesan harus 1–${MAX_MESSAGE} karakter.`)
   const files = await prepareAttachments(attachments)
 
@@ -56,12 +60,14 @@ export async function answerSupport(session: Session, message: string, history: 
   const currentEvent = await getEvent(session.event_id)
   const currentSnapshot = await getSnapshot(session.event_id, currentEvent.active_version)
   const currentNow = serverNow(currentEvent.sim_clock_at)
+  history = latestExchange(history)
   const focus = resolveTargetFocus(text, history, currentSnapshot)
   if (focus.unknown_name) return reply(`${focus.unknown_name} tidak ditemukan pada rundown aktif. Sebutkan nama segmen yang tercatat; saya belum membuat perubahan.`, 'rule')
   if (focus.ambiguous) return reply(`Yang ingin diubah ${focus.item_ids.map(id => currentSnapshot.items.find(item => item.id === id)!.title).join(' atau ')}?`, 'rule')
 
   const proposals: Proposal[] = []
   const execute = async (name: string, input: unknown) => {
+    if (latestReportRequested && !['get_rundown_summary', 'get_event_context'].includes(name)) return { ok: false as const, error: 'Laporan terbaru hanya membaca rundown aktif; gunakan latest_commit dari server.' }
     const mismatch = guardRequestedTarget(currentSnapshot, focus, name, input, currentNow)
     if (mismatch) return { ok: false as const, error: mismatch }
     const scoped = name === 'recommend_reschedule' && focus.item_ids.length ? { target_item_ids: focus.item_ids } : input
@@ -71,13 +77,21 @@ export async function answerSupport(session: Session, message: string, history: 
   }
 
   const cfg = env()
+  const previous = currentEvent.active_version > 1 && (cfg.AI_PROVIDER !== 'rule' || latestReportRequested)
+    ? await getSnapshot(session.event_id, currentEvent.active_version - 1) : null
+  const latestReport = latestReportRequested && previous ? buildPayload({
+    base: previous, proposed: currentSnapshot, baseVersion: currentEvent.active_version - 1, version: currentEvent.active_version,
+    session, origin: 'manual_edit', committedAt: currentNow,
+  }) : null
+  if (latestReportRequested && !previous) return reply('Belum ada perubahan versi setelah rundown awal.', 'rule')
   if (cfg.AI_PROVIDER !== 'rule') {
     try {
       const context = buildAgentContext(session, currentSnapshot, currentEvent.active_version, currentNow, 'confirm')
-      const tools = toolsForCapability(session.capability)
+      const latestCommit = buildLatestCommit(previous, currentSnapshot, currentEvent.active_version)
+      const tools = toolsForCapability(session.capability).filter(tool => !latestReportRequested || ['get_rundown_summary', 'get_event_context'].includes(tool.name))
       const effort = files.length || reasoningProfileFor(text).effort === 'high' ? cfg.AGENT_REASONING_EFFORT : 'low'
       const memory = history.slice(-MAX_HISTORY_TURNS)
-      const payload = () => JSON.stringify({ context, application_guide: groundingFacts(), request: { message: text, history: memory, target: { ...focus, items: context.rundown.items.filter(item => focus.item_ids.includes(item.id)) }, attachments: files.map(file => ({ name: file.name, mime_type: file.mime_type, pages: file.pages })) } })
+      const payload = () => JSON.stringify({ context, latest_commit: latestCommit, application_guide: groundingFacts(), request: { message: text, history: memory, target: { ...focus, items: context.rundown.items.filter(item => focus.item_ids.includes(item.id)) }, attachments: files.map(file => ({ name: file.name, mime_type: file.mime_type, pages: file.pages })) } })
       let user = payload()
       const outputBudget = effort === 'low' ? 2048 : cfg.AGENT_MAX_OUTPUT_TOKENS
       while (memory.length && agentInputBudget(AGENT_PROMPT + user, tools, files) + outputBudget > cfg.AGENT_CONTEXT_TOKENS) { memory.shift(); user = payload() }
@@ -91,21 +105,23 @@ export async function answerSupport(session: Session, message: string, history: 
         limits: { contextTokens: cfg.AGENT_CONTEXT_TOKENS, outputTokens: cfg.AGENT_MAX_OUTPUT_TOKENS },
         attachments: files,
         structured: false,
-        onThinking: (text) => onEvent?.({ type: 'thinking', text }),
+        onThinking: latestReportRequested ? undefined : (text) => onEvent?.({ type: 'thinking', text }),
       })
       if (conversation) {
         const run = await runToolAgent(conversation, execute, undefined, onEvent)
         if (run.text) {
           // Jangan berhenti pada narasi tanpa preview untuk permintaan reschedule yang bisa ditangani.
-          if (!proposals.length && (RESCHEDULE_PATTERN.test(text) || (focus.item_ids.length && /ubah|ganti|geser|pindah/i.test(text)))) {
+          if (!latestReportRequested && !proposals.length && (RESCHEDULE_PATTERN.test(text) || (focus.item_ids.length && /ubah|ganti|geser|pindah/i.test(text)))) {
             const planned = focus.item_ids.length === 1 && focus.requested_start_hhmm
               ? await prepareSpecificMove(session, proposals, focus.item_ids[0], focus.requested_start_hhmm, onEvent)
               : await prepareRecommendation(session, proposals, history, onEvent, focus.item_ids)
             if (planned.proposals.length) return { ...planned, source: 'ai', reasoning: run.reasoning, steps: [...run.steps, ...planned.steps] }
           }
           log('info', 'support', { source: 'ai', steps: run.steps.length, proposals: proposals.length, reasoning: run.reasoning.length })
-          const answer = proposals.length ? 'Rekomendasi perubahan siap. Periksa pratinjau di bawah, lalu konfirmasi perubahan rundown untuk menyimpan versi baru.' : run.text
-          return { ...reply(answer, 'ai'), proposals, reasoning: run.reasoning, steps: run.steps }
+          const ungroundedReport = latestReport && !validateParagraph(run.text, latestReport)
+          const answer = proposals.length ? 'Rekomendasi perubahan siap. Periksa pratinjau di bawah, lalu konfirmasi perubahan rundown untuk menyimpan versi baru.'
+            : ungroundedReport ? templateParagraph(latestReport) : run.text
+          return { ...reply(answer, ungroundedReport && !proposals.length ? 'rule' : 'ai'), proposals, reasoning: ungroundedReport ? [] : run.reasoning, steps: run.steps }
         }
       }
     } catch (error) {
@@ -118,6 +134,7 @@ export async function answerSupport(session: Session, message: string, history: 
     }
   }
 
+  if (latestReport) return reply(templateParagraph(latestReport), 'rule')
   if (files.length) return reply('Model belum dapat membaca lampiran sekarang. Coba lagi atau tuliskan isi yang relevan; saya belum mengekstrak data dari berkas tersebut.', 'rule')
   return ruleAgent(session, text, proposals, history, onEvent)
 }
