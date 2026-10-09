@@ -1,6 +1,7 @@
 import { formatClock, localDate, zoneAbbrev } from '@/lib/time'
 import { endIso, sortByStart } from '@/modules/engine/schedule'
 import type { Snapshot } from '@/modules/engine/types'
+import { itemAliases } from '@/modules/agent/targeting'
 
 /** Hanya data yang aman untuk dikirim ke model: tanpa ID sesi, ID akun, roles, batas, atau secret. */
 export interface SupportContext {
@@ -39,7 +40,7 @@ export function buildAgentContext<Who extends { display_name: string; role_label
     actor: { name: you.display_name, role: you.role_label, capability: you.capability },
     execution: { mode: 'confirm', mutations_require: 'coordinator_session_and_website_confirmation', source_of_truth: 'server', requested_mode: mode },
     rundown: {
-      items: sortByStart(snapshot.items).map(item => ({ id: item.id, title: item.title, start_at: item.start_at, end_at: endIso(item), start_local: formatClock(item.start_at, zone), end_local: formatClock(endIso(item), zone), duration_seconds: item.duration_seconds, min_duration_seconds: item.min_duration_seconds, estimated_end_at: item.estimated_end_at, status: item.status, swappable: item.swappable, pic_role_ids: [...item.pic_role_ids], resource_ids: [...item.resource_ids] })),
+      items: sortByStart(snapshot.items).map(item => ({ id: item.id, title: item.title, aliases: itemAliases(item), start_at: item.start_at, end_at: endIso(item), start_date: localDate(item.start_at, zone), end_date: localDate(endIso(item), zone), start_local: formatClock(item.start_at, zone), end_local: formatClock(endIso(item), zone), duration_seconds: item.duration_seconds, min_duration_seconds: item.min_duration_seconds, estimated_end_at: item.estimated_end_at, status: item.status, swappable: item.swappable, pic_role_ids: [...item.pic_role_ids], resource_ids: [...item.resource_ids], segment: item.segment ?? null, equipment: item.equipment ?? [], notes: item.notes ?? [] })),
       constraints: snapshot.constraints.map(c => ({ id: c.id, item_id: c.item_id, type: c.type, at: c.at, hard: c.hard, note: c.note ?? null })),
       dependencies: snapshot.dependencies.map(d => ({ id: d.id, predecessor_id: d.predecessor_id, successor_id: d.successor_id, type: d.type })),
       roles: snapshot.roles.map(role => ({ id: role.id, label: role.label })),

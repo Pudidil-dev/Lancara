@@ -5,7 +5,7 @@ export type AgentStreamEvent =
   | { type: 'thinking'; text: string }
   | { type: 'tool'; tool: string; status: 'running' | 'done'; ok?: boolean; note?: string }
 
-export async function streamAgent<R>(path: string, payload: unknown, onEvent: (event: AgentStreamEvent) => void, timeoutMs = 100_000): Promise<R> {
+export async function streamAgent<R>(path: string, payload: unknown, onEvent: (event: AgentStreamEvent) => void, timeoutMs = 190_000): Promise<R> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   const outcome: { reply: R | null } = { reply: null }

@@ -2,17 +2,18 @@
 export const AGENT_ROUTES = ['rundown_summary', 'item_lookup', 'delay_report', 'earlier_start_report', 'active_end_report', 'cancel_report', 'constraint_check', 'workflow_help', 'scope_guard'] as const
 export type AgentRoute = typeof AGENT_ROUTES[number]
 export type Capability = 'coordinator' | 'crew'
-export type ReasoningEffort = 'low' | 'high'
+export type ReasoningEffort = 'low' | 'high' | 'max'
 export const REASONING_PROFILES = {
   low: { effort: 'low' as const, max_tokens: 2048, step_timeout_ms: 20000, total_timeout_ms: 45000 },
   high: { effort: 'high' as const, max_tokens: 8192, step_timeout_ms: 35000, total_timeout_ms: 90000 },
+  max: { effort: 'max' as const, max_tokens: 128000, step_timeout_ms: 90000, total_timeout_ms: 180000 },
 }
 
 /** Profil dipilih server dari kabar terbaru; client/model tidak dapat mengatur budget atau izin. */
 export function reasoningProfileFor(message: string) {
   if (inspectRequest(message).blocked) return REASONING_PROFILES.low
   const analysis = /\b(?:telat|terlambat|delay|baru bisa mulai|molor|overtime|estimasi selesai|diperkirakan selesai|perkiraan selesai|batal|dibatalkan|cancel|tidak hadir|tidak datang|absen|berhalangan|lebih awal|lebih cepat|dimajukan|maju|diundur|mundur|reschedul\w*|rekomendasi|rekomendastion|recommend\w*|ganti|ubah|tambah|hapus|pangkas|potong|susun ulang|atur ulang|jadwalkan|format|konfigurasi|pengaturan|curfew|resource|dependensi)\b/i
-  return analysis.test(message.normalize('NFKC')) ? REASONING_PROFILES.high : REASONING_PROFILES.low
+  return analysis.test(message.normalize('NFKC')) || /mengubah|mengganti|memindah|menggeser|analisis|analisa/i.test(message) ? REASONING_PROFILES.high : REASONING_PROFILES.low
 }
 export const ROUTE_TO_KIND = { delay_report: 'delay', earlier_start_report: 'earlier_start', active_end_report: 'end_estimate', cancel_report: 'cancel' } as const
 export const ROUTE_RULES = [

@@ -5,7 +5,10 @@ const nextConfig: NextConfig = {
   distDir: process.env.NEXT_DIST_DIR || '.next',
   poweredByHeader: false,
   reactStrictMode: true,
-  serverExternalPackages: ['pg'],
+  serverExternalPackages: ['pg', 'tesseract.js', '@tesseract.js-data/eng', '@napi-rs/canvas'],
+  outputFileTracingIncludes: {
+    '/api/support/chat{,/stream}': ['node_modules/tesseract.js/**', 'node_modules/tesseract.js-core/**', 'node_modules/@tesseract.js-data/eng/**', 'node_modules/@napi-rs/canvas*/**'],
+  },
   async headers() {
     return [
       {

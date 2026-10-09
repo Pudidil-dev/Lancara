@@ -1,6 +1,7 @@
 // Parser deterministik bahasa Indonesia (provider "rule"). Tanpa jaringan → jalur demo yang selalu tersedia.
 import type { Snapshot } from '@/modules/engine/types'
 import type { Extraction } from './extraction'
+import { matchNamedItems } from '@/modules/agent/targeting'
 
 const STOPWORDS = new Set(['dan', 'yang', 'untuk', 'final', 'acara', 'sesi', 'dengan'])
 
@@ -10,6 +11,8 @@ const LATE = /\b(telat|terlambat|delay|baru bisa|baru sampai|baru tiba|baru data
 const ESTIMATE = /\b(sekitar|kira[- ]?kira|kurang lebih|perkiraan|estimasi|kayaknya|mungkin|an)\b|\d(an)\b/
 
 function matchItems(text: string, snapshot: Snapshot): string[] {
+  const named = matchNamedItems(text, snapshot.items)
+  if (named.length) return named
   const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   // Batas kata penting: "talent baru" bukan penyebutan "Talent B".
   const exact = snapshot.items.filter((i) => new RegExp(`\\b${escape(i.title.toLowerCase())}\\b`).test(text))

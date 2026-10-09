@@ -10,13 +10,16 @@ import { ruleExtract } from '@/modules/ai/rule-parser'
 import { AGENT_PROMPT } from '@/modules/agent/agent-prompt'
 import { reasoningProfileFor } from '@/modules/agent/policy'
 import type { RescheduleRecommendation } from '@/modules/agent/rescheduling'
-import { createConversation, runToolAgent, type AgentProgress } from '@/modules/agent/runner'
+import { agentInputBudget, createConversation, runToolAgent, type AgentProgress } from '@/modules/agent/runner'
 import { describeOutcome, executeTool, handleDelta, toolsForCapability, undoDecision, type Proposal } from '@/modules/agent/tools'
 import { getEvent, getSnapshot } from '@/modules/events/service'
 import { buildAgentContext } from './context'
+import { guardRequestedTarget, resolveTargetFocus } from '@/modules/agent/targeting'
 import { groundingFacts, ruleAnswer, type Suggestion } from './knowledge'
+import { MAX_MESSAGE, MAX_HISTORY_TURNS, type AgentAttachment } from './limits'
+import { prepareAttachments } from './attachments'
 
-export const MAX_MESSAGE = 500
+export { MAX_MESSAGE } from './limits'
 export const SUPPORT_PER_MINUTE = 20
 
 export interface SupportTurn { role: 'user' | 'assistant'; text: string }
@@ -39,9 +42,10 @@ const RESCHEDULE_PATTERN = /reschedul|rekomendasi|rekomendastion|recommend|susun
  * Model menyusun rencana lewat tools. Versi aktif hanya berubah setelah konfirmasi website.
  * Jalur aturan tetap membuat preview saat provider gagal; bukan commit tersembunyi.
  */
-export async function answerSupport(session: Session, message: string, history: SupportTurn[] = [], onEvent?: (event: AgentProgress) => void): Promise<SupportReply> {
+export async function answerSupport(session: Session, message: string, history: SupportTurn[] = [], onEvent?: (event: AgentProgress) => void, attachments: AgentAttachment[] = []): Promise<SupportReply> {
   const text = message.trim()
   if (!text || text.length > MAX_MESSAGE) throw new AppError('VALIDATION_ERROR', `Pesan harus 1–${MAX_MESSAGE} karakter.`)
+  const files = await prepareAttachments(attachments)
 
   // Rate limit per sesi memakai tabel parse_usage dengan kunci "support:" agar tidak tercampur.
   const key = `support:${session.session_id}`
@@ -49,9 +53,19 @@ export async function answerSupport(session: Session, message: string, history: 
   if (Number(recent[0].n) >= SUPPORT_PER_MINUTE) throw new AppError('RATE_LIMITED', 'Terlalu banyak pertanyaan. Tunggu sebentar.')
   await query('INSERT INTO parse_usage (session_id) VALUES ($1)', [key])
 
+  const currentEvent = await getEvent(session.event_id)
+  const currentSnapshot = await getSnapshot(session.event_id, currentEvent.active_version)
+  const currentNow = serverNow(currentEvent.sim_clock_at)
+  const focus = resolveTargetFocus(text, history, currentSnapshot)
+  if (focus.unknown_name) return reply(`${focus.unknown_name} tidak ditemukan pada rundown aktif. Sebutkan nama segmen yang tercatat; saya belum membuat perubahan.`, 'rule')
+  if (focus.ambiguous) return reply(`Yang ingin diubah ${focus.item_ids.map(id => currentSnapshot.items.find(item => item.id === id)!.title).join(' atau ')}?`, 'rule')
+
   const proposals: Proposal[] = []
   const execute = async (name: string, input: unknown) => {
-    const outcome = await executeTool(session, name, input)
+    const mismatch = guardRequestedTarget(currentSnapshot, focus, name, input, currentNow)
+    if (mismatch) return { ok: false as const, error: mismatch }
+    const scoped = name === 'recommend_reschedule' && focus.item_ids.length ? { target_item_ids: focus.item_ids } : input
+    const outcome = await executeTool(session, name, scoped)
     if (outcome.ok && outcome.proposal) proposals.push(outcome.proposal)
     return outcome
   }
@@ -59,17 +73,23 @@ export async function answerSupport(session: Session, message: string, history: 
   const cfg = env()
   if (cfg.AI_PROVIDER !== 'rule') {
     try {
-      const event = await getEvent(session.event_id)
-      const snapshot = await getSnapshot(session.event_id, event.active_version)
-      const context = buildAgentContext(session, snapshot, event.active_version, serverNow(event.sim_clock_at), 'confirm')
-      const user = JSON.stringify({ context, application_guide: groundingFacts(), request: { message: text, history: history.slice(-6) } })
-      const conversation = createConversation(AGENT_PROMPT, user, toolsForCapability(session.capability), {
+      const context = buildAgentContext(session, currentSnapshot, currentEvent.active_version, currentNow, 'confirm')
+      const tools = toolsForCapability(session.capability)
+      const effort = files.length || reasoningProfileFor(text).effort === 'high' ? cfg.AGENT_REASONING_EFFORT : 'low'
+      const memory = history.slice(-MAX_HISTORY_TURNS)
+      const payload = () => JSON.stringify({ context, application_guide: groundingFacts(), request: { message: text, history: memory, target: { ...focus, items: context.rundown.items.filter(item => focus.item_ids.includes(item.id)) }, attachments: files.map(file => ({ name: file.name, mime_type: file.mime_type, pages: file.pages })) } })
+      let user = payload()
+      const outputBudget = effort === 'low' ? 2048 : cfg.AGENT_MAX_OUTPUT_TOKENS
+      while (memory.length && agentInputBudget(AGENT_PROMPT + user, tools, files) + outputBudget > cfg.AGENT_CONTEXT_TOKENS) { memory.shift(); user = payload() }
+      const conversation = createConversation(AGENT_PROMPT, user, tools, {
         provider: cfg.AI_PROVIDER,
         model: cfg.AI_MODEL,
         anthropicKey: cfg.ANTHROPIC_API_KEY,
         openaiBaseUrl: cfg.OPENAI_BASE_URL,
         openaiKey: cfg.OPENAI_API_KEY,
-        reasoningEffort: reasoningProfileFor(text).effort,
+        reasoningEffort: effort,
+        limits: { contextTokens: cfg.AGENT_CONTEXT_TOKENS, outputTokens: cfg.AGENT_MAX_OUTPUT_TOKENS },
+        attachments: files,
         structured: false,
         onThinking: (text) => onEvent?.({ type: 'thinking', text }),
       })
@@ -77,8 +97,10 @@ export async function answerSupport(session: Session, message: string, history: 
         const run = await runToolAgent(conversation, execute, undefined, onEvent)
         if (run.text) {
           // Jangan berhenti pada narasi tanpa preview untuk permintaan reschedule yang bisa ditangani.
-          if (!proposals.length && RESCHEDULE_PATTERN.test(text)) {
-            const planned = await prepareRecommendation(session, proposals, history, onEvent)
+          if (!proposals.length && (RESCHEDULE_PATTERN.test(text) || (focus.item_ids.length && /ubah|ganti|geser|pindah/i.test(text)))) {
+            const planned = focus.item_ids.length === 1 && focus.requested_start_hhmm
+              ? await prepareSpecificMove(session, proposals, focus.item_ids[0], focus.requested_start_hhmm, onEvent)
+              : await prepareRecommendation(session, proposals, history, onEvent, focus.item_ids)
             if (planned.proposals.length) return { ...planned, source: 'ai', reasoning: run.reasoning, steps: [...run.steps, ...planned.steps] }
           }
           log('info', 'support', { source: 'ai', steps: run.steps.length, proposals: proposals.length, reasoning: run.reasoning.length })
@@ -96,6 +118,7 @@ export async function answerSupport(session: Session, message: string, history: 
     }
   }
 
+  if (files.length) return reply('Model belum dapat membaca lampiran sekarang. Coba lagi atau tuliskan isi yang relevan; saya belum mengekstrak data dari berkas tersebut.', 'rule')
   return ruleAgent(session, text, proposals, history, onEvent)
 }
 
@@ -120,8 +143,11 @@ async function ruleAgent(session: Session, text: string, proposals: Proposal[], 
   const snapshot = await getSnapshot(session.event_id, event.active_version)
   const now = serverNow(event.sim_clock_at)
   const extraction = ruleExtract(text, snapshot)
+  const focus = resolveTargetFocus(text, history, snapshot)
+  if (focus.item_ids.length === 1 && focus.requested_start_hhmm) return prepareSpecificMove(session, proposals, focus.item_ids[0], focus.requested_start_hhmm, onEvent)
   if (!extraction.type || !extraction.item_ids.length) {
-    if (RESCHEDULE_PATTERN.test(text)) return prepareRecommendation(session, proposals, history, onEvent)
+    if (RESCHEDULE_PATTERN.test(text)) return prepareRecommendation(session, proposals, history, onEvent, focus.item_ids)
+    if (focus.item_ids.length && /ubah|ganti|geser|jadwal/i.test(text)) return reply(`Targetnya ${snapshot.items.find(item => item.id === focus.item_ids[0])!.title}. Sebutkan jam baru atau minta rekomendasi untuk segmen tersebut.`, 'rule')
     return reply(faq.answer, 'rule', faq.suggestions)
   }
 
@@ -145,10 +171,21 @@ async function ruleAgent(session: Session, text: string, proposals: Proposal[], 
   return { ...reply(assumption + describeOutcome(outcome), 'rule'), proposals, steps: [{ tool: 'propose_schedule_change', ok: outcome.ok }] }
 }
 
+async function prepareSpecificMove(session: Session, proposals: Proposal[], itemId: string, clock: string, onEvent?: (event: AgentProgress) => void): Promise<SupportReply> {
+  const event = await getEvent(session.event_id)
+  const snapshot = await getSnapshot(session.event_id, event.active_version)
+  const title = snapshot.items.find(item => item.id === itemId)?.title ?? itemId
+  onEvent?.({ type: 'tool', tool: 'edit_rundown', status: 'running' })
+  const outcome = await executeTool(session, 'edit_rundown', { base_version: event.active_version, summary: `Pindahkan ${title} ke ${clock}`.slice(0, 200), operations: [{ op: 'update', item_id: itemId, start_hhmm: clock }] })
+  onEvent?.({ type: 'tool', tool: 'edit_rundown', status: 'done', ok: outcome.ok })
+  if (outcome.ok && outcome.proposal) proposals.push(outcome.proposal)
+  return { ...reply(outcome.ok ? `${title} siap dipindah ke ${clock.replace(':', '.')}. Periksa pratinjau lalu konfirmasi perubahan rundown.` : `${title} belum bisa dipindah ke ${clock.replace(':', '.')}: ${outcome.error}`, 'rule'), proposals, steps: [{ tool: 'edit_rundown', ok: outcome.ok }] }
+}
+
 /** Rekomendasi selalu diverifikasi dari snapshot baru; riwayat hanya membantu memilih. */
-async function prepareRecommendation(session: Session, proposals: Proposal[], history: SupportTurn[], onEvent?: (event: AgentProgress) => void): Promise<SupportReply> {
+async function prepareRecommendation(session: Session, proposals: Proposal[], history: SupportTurn[], onEvent?: (event: AgentProgress) => void, targetItemIds: string[] = []): Promise<SupportReply> {
   onEvent?.({ type: 'tool', tool: 'recommend_reschedule', status: 'running' })
-  const outcome = await executeTool(session, 'recommend_reschedule', {})
+  const outcome = await executeTool(session, 'recommend_reschedule', targetItemIds.length ? { target_item_ids: targetItemIds } : {})
   onEvent?.({ type: 'tool', tool: 'recommend_reschedule', status: 'done', ok: outcome.ok })
   const steps: AgentStep[] = [{ tool: 'recommend_reschedule', ok: outcome.ok }]
   if (!outcome.ok) return { ...reply(outcome.error, 'rule'), steps }

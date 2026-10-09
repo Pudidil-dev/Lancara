@@ -94,7 +94,7 @@ export interface RescheduleRecommendation {
 }
 
 /** Coba pengisi jeda dari sesi yang ada, termasuk sesi di luar batas pencarian tukar legacy. */
-export function recommendReschedules(base: Snapshot, now: string): RescheduleRecommendation[] {
+export function recommendReschedules(base: Snapshot, now: string, targetItemIds?: string[]): RescheduleRecommendation[] {
   const active = sortByStart(base.items.filter(isActive))
   const nowMs = toMs(now)
   const gaps: Array<{ start: number; end: number; cancelled: boolean }> = []
@@ -112,6 +112,7 @@ export function recommendReschedules(base: Snapshot, now: string): RescheduleRec
   let attempts = 0
   for (const gap of gaps.sort((a, b) => Number(b.cancelled) - Number(a.cancelled) || a.start - b.start)) {
     for (const item of active) {
+      if (targetItemIds?.length && !targetItemIds.includes(item.id)) continue
       if (++attempts > 3600) break
       if (item.status !== 'pending' || !item.swappable || isProtected(item, base) || toMs(item.start_at) <= gap.start || item.duration_seconds * 1000 > gap.end - gap.start || base.constraints.some(c => c.item_id === item.id && c.type === 'fixed_start')) continue
       const operation: EditRundownOperation = { op: 'update', item_id: item.id, start_hhmm: formatClock(new Date(gap.start).toISOString(), base.event.timezone) }

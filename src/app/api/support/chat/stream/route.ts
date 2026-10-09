@@ -1,19 +1,14 @@
 import { NextResponse } from 'next/server'
-import { z } from 'zod'
 import { AppError } from '@/lib/errors'
 import { body, route } from '@/lib/http'
 import { log } from '@/lib/logger'
 import { requireSession } from '@/lib/session'
-import { answerSupport, MAX_MESSAGE } from '@/modules/support/service'
+import { answerSupport } from '@/modules/support/service'
+import { SupportInput } from '@/modules/support/input'
 
 export const dynamic = 'force-dynamic'
 // Loop tool bisa beberapa putaran model; batas durasi fungsi serverless dinaikkan agar tidak terpotong.
-export const maxDuration = 120
-
-const Input = z.object({
-  message: z.string().trim().min(1).max(MAX_MESSAGE),
-  history: z.array(z.object({ role: z.enum(['user', 'assistant']), text: z.string().max(MAX_MESSAGE) })).max(6).optional(),
-})
+export const maxDuration = 240
 
 /**
  * Stream NDJSON: satu objek JSON per baris. Tipe event: thinking (potongan reasoning), tool (running/done),
@@ -24,13 +19,13 @@ export const POST = route(
   'support.chat.stream',
   async (req) => {
     const session = await requireSession(req)
-    const input = await body(req, Input)
+    const input = await body(req, SupportInput)
     const encoder = new TextEncoder()
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
         const send = (event: object) => controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`))
         try {
-          const reply = await answerSupport(session, input.message, input.history ?? [], (event) => send(event))
+          const reply = await answerSupport(session, input.message, input.history ?? [], (event) => send(event), input.attachments ?? [])
           send({ type: 'done', reply })
         } catch (error) {
           const app = error instanceof AppError ? error : null

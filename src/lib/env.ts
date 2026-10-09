@@ -7,6 +7,9 @@ const EnvSchema = z.object({
   AI_MODEL: z.string().default('claude-opus-5-5'),
   // Nilai auto lama tetap terbaca; tool selalu preview dan menunggu konfirmasi website.
   AGENT_AUTONOMY: z.enum(['auto', 'confirm']).default('confirm'),
+  AGENT_REASONING_EFFORT: z.enum(['high', 'max']).default('max'),
+  AGENT_CONTEXT_TOKENS: z.coerce.number().int().min(16000).max(1000000).default(400000),
+  AGENT_MAX_OUTPUT_TOKENS: z.coerce.number().int().min(2048).max(128000).default(128000),
   ANTHROPIC_API_KEY: z.string().optional(),
   OPENAI_BASE_URL: z.url().refine((value) => ['http:', 'https:'].includes(new URL(value).protocol), 'OPENAI_BASE_URL harus http atau https').optional(),
   OPENAI_API_KEY: z.string().optional(),
@@ -20,6 +23,7 @@ const EnvSchema = z.object({
   TELEGRAM_WEBHOOK_SECRET: z.string().min(24).max(256).regex(/^[A-Za-z0-9_-]+$/, 'Secret webhook hanya boleh berisi huruf, angka, _ dan -').optional(),
   TELEGRAM_BOT_USERNAME: z.string().min(5).max(32).regex(/^[A-Za-z][A-Za-z0-9_]+$/, 'Username bot tanpa @ atau URL').optional(),
 }).superRefine((value, ctx) => {
+  if (value.AGENT_MAX_OUTPUT_TOKENS >= value.AGENT_CONTEXT_TOKENS) ctx.addIssue({ code: 'custom', path: ['AGENT_MAX_OUTPUT_TOKENS'], message: 'Output harus lebih kecil dari context agar input dan tool punya ruang.' })
   if (!value.TELEGRAM_ENABLED) return
   for (const key of ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_WEBHOOK_SECRET', 'TELEGRAM_BOT_USERNAME'] as const) {
     if (!value[key]) ctx.addIssue({ code: 'custom', path: [key], message: `${key} wajib diisi bila TELEGRAM_ENABLED=true` })

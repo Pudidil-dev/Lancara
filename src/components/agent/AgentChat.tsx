@@ -8,25 +8,13 @@ import { useOnline } from '@/hooks/useOnline'
 import { useSession } from '@/hooks/useSession'
 import { Icon } from '@/components/ui'
 import { SchedulePreview, type ScheduleProposal } from './SchedulePreview'
+import { chatHistory, compactChat, readChatMemory, writeChatMemory, type ChatMessage as Message } from './chat-memory'
+import { MAX_MESSAGE, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, type AgentAttachment } from '@/modules/support/limits'
 
 interface Suggestion { label: string; href: string }
 type Proposal = ScheduleProposal
 interface Step { tool: string; ok: boolean; note?: string; running?: boolean }
 interface AgentReply { answer: string; source: 'rule' | 'ai'; suggestions: Suggestion[]; proposals: Proposal[]; reasoning?: string[]; steps?: Step[] }
-interface Message {
-  id: number
-  role: 'user' | 'assistant'
-  text: string
-  at: string
-  source?: 'rule' | 'ai'
-  suggestions?: Suggestion[]
-  proposals?: Proposal[]
-  reasoning?: string[]
-  steps?: Step[]
-  error?: boolean
-}
-
-const MAX_MESSAGE = 500
 const GREETING = 'Halo, saya siap untuk membantu anda!'
 
 /** Langkah 'running' diganti hasil 'done' untuk tool yang sama; urutan tetap. */
@@ -64,39 +52,83 @@ export function AgentChat() {
   const [messages, setMessages] = useState<Message[]>([{ id: 0, role: 'assistant', text: GREETING, at: '' }])
   const [draft, setDraft] = useState('')
   const [pending, setPending] = useState(false)
+  const [uploads, setUploads] = useState<AgentAttachment[]>([])
+  const [fileError, setFileError] = useState('')
+  const [memorySession, setMemorySession] = useState<string | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
   const [live, setLive] = useState<{ thinking: string; steps: Step[] } | null>(null)
   const nextId = useRef(1)
   const logRef = useRef<HTMLDivElement>(null)
   const online = useOnline()
   const { session } = useSession()
+  const activeSession = useRef<string | null>(null)
+  activeSession.current = session?.session_id ?? null
   const uid = useId()
 
   // Jam sapaan diisi di klien agar tidak berbeda dengan render server.
   useEffect(() => { setMessages((prev) => prev.map((m) => (m.id === 0 && !m.at ? { ...m, at: clock() } : m))) }, [])
   useEffect(() => { logRef.current?.scrollTo({ top: logRef.current.scrollHeight }) }, [messages, pending, live])
+  useEffect(() => {
+    if (!session?.session_id) { setMemorySession(null); return }
+    let restored: Message[] | null = null
+    try { restored = readChatMemory(sessionStorage, session.session_id) } catch { /* Penyimpanan tab opsional. */ }
+    setMessages(restored?.length ? restored : [{ id: 0, role: 'assistant', text: GREETING, at: clock() }])
+    nextId.current = restored?.length ? Math.max(...restored.map(m => m.id)) + 1 : 1
+    setPending(false); setLive(null); setUploads([]); setDraft('')
+    setMemorySession(session.session_id)
+  }, [session?.session_id])
+  useEffect(() => {
+    if (session?.session_id && memorySession === session.session_id) {
+      try { writeChatMemory(sessionStorage, session.session_id, messages) } catch { /* Penyimpanan tab opsional. */ }
+    }
+  }, [messages, memorySession, session?.session_id])
+
+  async function attach(files: FileList | null) {
+    if (!files) return
+    setFileError('')
+    const chosen = Array.from(files)
+    if (chosen.length > MAX_ATTACHMENTS || chosen.reduce((sum, file) => sum + file.size, 0) > MAX_ATTACHMENT_BYTES) { setFileError('Maksimal dua lampiran dengan total ukuran 2 MB.'); return }
+    try {
+      const values = await Promise.all(chosen.map(file => new Promise<AgentAttachment>((resolve, reject) => {
+        const mime = file.type || (file.name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : '')
+        if (!['image/png', 'image/jpeg', 'image/webp', 'application/pdf'].includes(mime)) { reject(new Error('Format lampiran harus PNG, JPG, WebP, atau PDF.')); return }
+        const reader = new FileReader()
+        reader.onload = () => resolve({ name: file.name, mime_type: mime as AgentAttachment['mime_type'], data: String(reader.result).split(',')[1] })
+        reader.onerror = () => reject(new Error('Lampiran tidak dapat dibaca.'))
+        reader.readAsDataURL(file)
+      })))
+      setUploads(values)
+    } catch (error) { setFileError((error as Error).message) }
+    finally { if (fileRef.current) fileRef.current.value = '' }
+  }
 
   async function send(raw: string) {
-    const text = raw.trim()
+    const text = raw.trim() || (uploads.length ? 'Baca lampiran ini dan cocokkan dengan rundown aktif.' : '')
     if (!text || pending || !online) return
-    const history = messages.filter((m) => !m.error && m.id !== 0).slice(-6).map((m) => ({ role: m.role, text: m.text.slice(0, MAX_MESSAGE) }))
-    setMessages((prev) => [...prev, { id: nextId.current++, role: 'user', text, at: clock() }])
+    const requestSession = activeSession.current
+    const history = chatHistory(messages)
+    const files = uploads.length ? uploads : [...messages].reverse().find(m => m.files?.length)?.files ?? []
+    setMessages((prev) => compactChat([...prev, { id: nextId.current++, role: 'user', text, at: clock(), ...(uploads.length ? { files: uploads, fileNames: uploads.map(file => file.name) } : {}) }]))
+    setUploads([])
     setDraft('')
     setPending(true)
     try {
       setLive({ thinking: '', steps: [] })
-      const reply = await streamAgent<AgentReply>('/api/support/chat/stream', { message: text, history }, (event) => {
+      const reply = await streamAgent<AgentReply>('/api/support/chat/stream', { message: text, history, attachments: files }, (event) => {
+        if (activeSession.current !== requestSession) return
         if (event.type === 'thinking') setLive((prev) => prev && { ...prev, thinking: prev.thinking + event.text })
         else setLive((prev) => prev && { ...prev, steps: upsertStep(prev.steps, event) })
       })
+      if (activeSession.current !== requestSession) return
       setMessages((prev) => [...prev, { id: nextId.current++, role: 'assistant', text: reply.answer, at: clock(), source: reply.source, suggestions: reply.suggestions, proposals: reply.proposals, reasoning: reply.reasoning, steps: reply.steps }])
       // Bila agen menerapkan perubahan, segarkan rundown/inbox di halaman yang sedang dibuka.
       if (reply.proposals?.some((p) => p.applied)) refreshQueries()
     } catch (error) {
-      const message = error instanceof ApiError && error.code === 'RATE_LIMITED' ? error.message : 'AI belum dapat menyelesaikan tugas sekarang. Coba lagi sebentar.'
+      if (activeSession.current !== requestSession) return
+      const message = error instanceof ApiError && ['RATE_LIMITED', 'VALIDATION_ERROR'].includes(error.code) ? error.message : 'AI belum dapat menyelesaikan tugas sekarang. Coba lagi sebentar.'
       setMessages((prev) => [...prev, { id: nextId.current++, role: 'assistant', text: message, at: clock(), error: true }])
     } finally {
-      setPending(false)
-      setLive(null)
+      if (activeSession.current === requestSession) { setPending(false); setLive(null) }
     }
   }
 
@@ -118,6 +150,7 @@ export function AgentChat() {
           {m.reasoning && m.reasoning.length > 0 && <details className="support-thinking"><summary>Ringkasan analisis</summary>{m.reasoning.map((r, i) => <p key={i}>{r}</p>)}</details>}
           {m.steps && m.steps.length > 0 && <StepList steps={m.steps} label="Langkah agen" />}
           <p>{m.text}</p>
+          {m.fileNames?.length ? <p className="muted small"><Icon name="file-up" /> {m.fileNames.join(', ')}</p> : null}
           {m.proposals && m.proposals.length > 0 && <div className="stack">{m.proposals.map((p) => p.preview && !p.applied
             ? <SchedulePreview key={p.change_id} proposal={p} canConfirm={!!session} />
             : <div className="support-links" key={p.change_id}><Link className="btn btn-primary btn-compact" href={p.href}>{p.label}</Link></div>)}</div>}
@@ -135,10 +168,14 @@ export function AgentChat() {
     </div>
     <div className="agent-foot">
       {!online && <p className="lc-alert" data-tone="warning">Tidak ada koneksi. AI memerlukan server.</p>}
+      {fileError && <p className="lc-alert" data-tone="warning" role="alert">{fileError}</p>}
+      {uploads.length > 0 && <div className="row">{uploads.map((file, index) => <button type="button" className="btn btn-compact" key={`${file.name}-${index}`} onClick={() => setUploads(prev => prev.filter((_, i) => i !== index))} aria-label={`Hapus lampiran ${file.name}`}><Icon name="file-up" />{file.name} ×</button>)}</div>}
       <form className="agent-form" onSubmit={(event: FormEvent) => { event.preventDefault(); void send(draft) }}>
         <label htmlFor={`${uid}-input`} className="sr-only">Pesan untuk AI Assistant</label>
+        <input ref={fileRef} type="file" className="sr-only" accept="image/png,image/jpeg,image/webp,application/pdf" multiple disabled={pending} aria-label="Lampirkan gambar atau PDF" onChange={event => void attach(event.target.files)} />
+        <button type="button" className="btn btn-compact" aria-label="Pilih gambar atau PDF" title="Gambar/PDF, total maksimal 2 MB" disabled={pending || !online} onClick={() => fileRef.current?.click()}><Icon name="file-up" /></button>
         <textarea id={`${uid}-input`} rows={1} maxLength={MAX_MESSAGE} value={draft} disabled={pending} placeholder="Apa yang mau anda ubah?" onChange={(e) => setDraft(e.target.value)} onKeyDown={onInputKey} />
-        <button type="submit" className="agent-send" aria-label="Kirim pesan" disabled={pending || !draft.trim() || !online}><Icon name="send" size={18} /></button>
+        <button type="submit" className="agent-send" aria-label="Kirim pesan" disabled={pending || (!draft.trim() && !uploads.length) || !online}><Icon name="send" size={18} /></button>
       </form>
       <p className="agent-disclaimer">*Mohon periksa kembali, AI bisa keliru.</p>
     </div>

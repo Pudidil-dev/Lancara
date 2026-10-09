@@ -27,6 +27,7 @@ export interface Proposal {
 export type ToolOutcome = { ok: true; data: unknown; proposal?: Proposal } | { ok: false; error: string; code?: ErrorCode }
 
 const TIME_PATTERN = '^([01]?\\d|2[0-3])[:.][0-5]\\d$'
+const RecommendInput = z.object({ target_item_ids: z.array(z.string().min(1).max(64)).min(1).max(60).nullish() }).strict()
 
 /** Kompatibilitas konfigurasi lama: semua tool perubahan kini hanya menyiapkan preview. */
 export function autonomyEnabled(): boolean {
@@ -83,7 +84,7 @@ export const TOOL_SPECS: ToolSpec[] = [
   {
     name: 'recommend_reschedule',
     description: 'Mencari sampai tiga rekomendasi yang benar-benar lolos engine untuk mengisi jeda dengan sesi pending, tanpa mengubah DB. Mencoba alternatif bila sesi pertama terhalang batas. Pilih operations dari rekomendasi lalu panggil edit_rundown untuk menyiapkan konfirmasi.',
-    parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
+    parameters: { type: 'object', properties: { target_item_ids: { type: ['array', 'null'], items: { type: 'string', minLength: 1, maxLength: 64 }, minItems: 1, maxItems: 60, description: 'ID segmen yang diminta pengguna. Null untuk rekomendasi umum.' } }, required: ['target_item_ids'], additionalProperties: false },
   },
   {
     name: 'edit_rundown',
@@ -126,7 +127,7 @@ export function toolsForCapability(capability: Session['capability'] | 'crew'): 
 }
 
 export function validateToolInput(name: string, raw: unknown): { ok: true; data: unknown } | { ok: false; error: string } {
-  const schema = ['get_rundown_summary', 'get_event_context', 'list_changes', 'get_history', 'get_my_inbox', 'recommend_reschedule'].includes(name) ? SummaryInput : name === 'propose_schedule_change' ? ProposeInput : name === 'undo_decision' ? UndoInput : name === 'edit_rundown' ? EditRundownInputSchema : name === 'edit_event_configuration' ? EditEventConfigurationInputSchema : null
+  const schema = ['get_rundown_summary', 'get_event_context', 'list_changes', 'get_history', 'get_my_inbox'].includes(name) ? SummaryInput : name === 'recommend_reschedule' ? RecommendInput : name === 'propose_schedule_change' ? ProposeInput : name === 'undo_decision' ? UndoInput : name === 'edit_rundown' ? EditRundownInputSchema : name === 'edit_event_configuration' ? EditEventConfigurationInputSchema : null
   if (!schema) return { ok: false, error: 'Tool tidak diizinkan.' }
   const parsed = schema.safeParse(raw)
   if (!parsed.success) return { ok: false, error: 'Input tool tidak valid.' }
@@ -315,11 +316,13 @@ async function editRundown(session: Session, raw: unknown): Promise<ToolOutcome>
   return finishChange(session, created.change_id, created.seq, input.base_version, snapshot.event.timezone)
 }
 
-async function recommend(session: Session): Promise<ToolOutcome> {
+async function recommend(session: Session, raw: unknown): Promise<ToolOutcome> {
+  const input = RecommendInput.parse(raw)
   const event = await getEvent(session.event_id)
   const snapshot = await getSnapshot(session.event_id, event.active_version)
   const now = serverNow(event.sim_clock_at)
-  const recommendations = recommendReschedules(snapshot, now)
+  if (input.target_item_ids?.some(id => !snapshot.items.some(item => item.id === id))) throw new AppError('VALIDATION_ERROR', 'Target rekomendasi tidak ada pada rundown aktif.')
+  const recommendations = recommendReschedules(snapshot, now, input.target_item_ids ?? undefined)
   return { ok: true, data: { base_version: event.active_version, now, timezone: snapshot.event.timezone, recommendations, status: recommendations.length ? 'rekomendasi_siap' : 'jadwal_sudah_efektif', applied: false, note: recommendations.length ? 'Rekomendasi sudah divalidasi. Panggil edit_rundown dengan operations terpilih untuk menyiapkan dialog konfirmasi.' : 'Tidak ada pemajuan sesi yang layak untuk mengisi jeda. Gunakan edit_rundown untuk rencana spesifik atau sesi pengganti yang diminta pengguna.' } }
 }
 
@@ -394,7 +397,7 @@ export async function executeTool(session: Session, name: string, input: unknown
     if (name === 'propose_schedule_change') return await propose(session, input)
     if (name === 'edit_rundown') return await editRundown(session, input)
     if (name === 'edit_event_configuration') return await configureEvent(session, input)
-    if (name === 'recommend_reschedule') return await recommend(session)
+    if (name === 'recommend_reschedule') return await recommend(session, input)
     if (name === 'undo_decision') return await undoDecision(session, UndoInput.parse(input).decision_id)
     if (name === 'list_changes') {
       SummaryInput.parse(input)
