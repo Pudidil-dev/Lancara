@@ -1,0 +1,31 @@
+node_modules
+.next
+out
+.env
+.env.local
+.env*.local
+.pgdata
+*.tsbuildinfo
+next-env.d.ts
+coverage
+.vercel
+
+# Secrets & lokal
+.env.*
+!.env.example
+*.pem
+*.key
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea
+.vscode/*
+!.vscode/extensions.json
+
+# Log & artefak tes
+*.log
+npm-debug.log*
+playwright-report
+test-results
+evidence/screenshots/*.tmp
