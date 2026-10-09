@@ -17,6 +17,10 @@ export interface Item {
   resource_ids: string[]
   /** Boleh dipindah posisinya lewat kandidat tukar. */
   swappable: boolean
+  /** Info operasional dari impor PDF (tidak dipakai engine): tipe/lokasi segmen, perlengkapan, catatan teknis. */
+  segment?: string | null
+  equipment?: string[]
+  notes?: string[]
 }
 
 export interface Dependency {
@@ -61,9 +65,14 @@ export type Delta =
   | { type: 'earliest_start'; item_id: string; value: string; is_estimate: boolean; reference_at: string | null }
   | { type: 'active_end_estimate'; item_id: string; value: string; is_estimate: boolean; reference_at: string | null }
   | { type: 'cancel_item'; item_id: string; is_estimate: false; reference_at: string | null }
+  /** Disusun server dari operasi CRUD, lalu dipratinjau dan disetujui lewat transaksi keputusan. */
+  | { type: 'revise_rundown'; snapshot: Snapshot; is_estimate: false; reference_at: string | null }
+  /** Konfigurasi event dibangun server; item tidak berubah sebelum pratinjau disetujui. */
+  | { type: 'configure_event'; snapshot: Snapshot; is_estimate: false; reference_at: string | null }
   | { type: 'revert_decision'; decision_id: string; before: Snapshot; after: Snapshot; is_estimate: false; reference_at: null }
 
 export type ViolationRule =
+  | 'BREAK_LOCKED'
   | 'MISSING_DATA'
   | 'INVALID_REFERENCE'
   | 'INVALID_DURATION'
@@ -90,14 +99,22 @@ export interface Violation {
   limit?: string
 }
 
-export interface ItemDiff {
+interface ItemDiffBase {
   item_id: string
   title: string
-  old: { start_at: string; end_at: string; duration_seconds: number; status: ItemStatus }
   new: { start_at: string; end_at: string; duration_seconds: number; status: ItemStatus }
-  changes: Array<'start' | 'duration' | 'status' | 'end_estimate'>
   start_shift_seconds: number
+  details?: Array<{ field: string; old: string; new: string }>
 }
+
+export type ItemDiff = ItemDiffBase & (
+  | {
+    kind?: 'changed'
+    old: { start_at: string; end_at: string; duration_seconds: number; status: ItemStatus }
+    changes: Array<'start' | 'duration' | 'status' | 'end_estimate' | 'title' | 'pic' | 'resources' | 'swappable'>
+  }
+  | { kind: 'added'; old: null; changes: Array<'added'> }
+)
 
 export type ImpactLevel = 'BLOCKER' | 'ACTION_REQUIRED' | 'FYI' | 'UNCHANGED'
 
@@ -120,6 +137,12 @@ export interface RoleImpact {
 
 export type Strategy = 'keep' | 'shift' | 'swap' | 'trim' | 'swap_trim' | 'revert'
 
+export interface ConfigurationDiff {
+  field: string
+  old: string
+  new: string
+}
+
 export interface Candidate {
   candidate_id: string
   rank: number
@@ -128,6 +151,7 @@ export interface Candidate {
   items_changed: number
   total_start_shift_seconds: number
   diff: ItemDiff[]
+  configuration_diff?: ConfigurationDiff[]
   proposed: Snapshot
   violations: Violation[]
   impact: RoleImpact[]

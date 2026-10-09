@@ -7,13 +7,27 @@ export function diffSnapshots(base: Snapshot, proposed: Snapshot): ItemDiff[] {
   const baseById = new Map(base.items.map((i) => [i.id, i]))
   for (const p of proposed.items) {
     const b = baseById.get(p.id)
-    if (!b) continue
-    const changes: ItemDiff['changes'] = []
+    if (!b) {
+      out.push({ kind: 'added', item_id: p.id, title: p.title, old: null, new: { start_at: p.start_at, end_at: endIso(p), duration_seconds: p.duration_seconds, status: p.status }, changes: ['added'], start_shift_seconds: 0 })
+      continue
+    }
+    const changes: Extract<ItemDiff, { kind?: 'changed' }>['changes'] = []
     if (b.start_at !== p.start_at) changes.push('start')
     if (b.duration_seconds !== p.duration_seconds) changes.push('duration')
     if (b.status !== p.status) changes.push('status')
     if (b.estimated_end_at !== p.estimated_end_at) changes.push('end_estimate')
+    if (b.title !== p.title) changes.push('title')
+    if (JSON.stringify(b.pic_role_ids) !== JSON.stringify(p.pic_role_ids)) changes.push('pic')
+    if (JSON.stringify(b.resource_ids) !== JSON.stringify(p.resource_ids)) changes.push('resources')
+    if (b.swappable !== p.swappable) changes.push('swappable')
     if (!changes.length) continue
+    const details: NonNullable<ItemDiff['details']> = []
+    const roles = (ids: string[], snapshot: Snapshot) => ids.map(id => snapshot.roles.find(r => r.id === id)?.label ?? id).join(', ') || 'Tidak ada'
+    const resources = (ids: string[], snapshot: Snapshot) => ids.map(id => snapshot.resources.find(r => r.id === id)?.label ?? id).join(', ') || 'Tidak ada'
+    if (changes.includes('title')) details.push({ field: 'Judul', old: b.title, new: p.title })
+    if (changes.includes('pic')) details.push({ field: 'PIC', old: roles(b.pic_role_ids, base), new: roles(p.pic_role_ids, proposed) })
+    if (changes.includes('resources')) details.push({ field: 'Resource', old: resources(b.resource_ids, base), new: resources(p.resource_ids, proposed) })
+    if (changes.includes('swappable')) details.push({ field: 'Fleksibel', old: b.swappable ? 'Ya' : 'Tidak', new: p.swappable ? 'Ya' : 'Tidak' })
     out.push({
       item_id: p.id,
       title: p.title,
@@ -21,12 +35,14 @@ export function diffSnapshots(base: Snapshot, proposed: Snapshot): ItemDiff[] {
       new: { start_at: p.start_at, end_at: endIso(p), duration_seconds: p.duration_seconds, status: p.status },
       changes,
       start_shift_seconds: Math.round((toMs(p.start_at) - toMs(b.start_at)) / 1000),
+      ...(details.length ? { details } : {}),
     })
   }
-  return out.sort((a, b) => toMs(a.old.start_at) - toMs(b.old.start_at) || a.item_id.localeCompare(b.item_id))
+  return out.sort((a, b) => toMs(a.old?.start_at ?? a.new.start_at) - toMs(b.old?.start_at ?? b.new.start_at) || a.item_id.localeCompare(b.item_id))
 }
 
 function reasonFor(d: ItemDiff): string {
+  if (d.kind === 'added') return 'Item baru'
   if (d.changes.includes('status') && d.new.status === 'cancelled') return 'Item dibatalkan'
   if (d.changes.includes('end_estimate')) return 'Estimasi selesai sesi aktif berubah'
   const parts: string[] = []
@@ -55,20 +71,58 @@ export function computeImpact(base: Snapshot, proposed: Snapshot, diff: ItemDiff
     byRole.set(roleId, { level: RANK[level] > RANK[cur.level] ? level : cur.level, entries: [...cur.entries, entry] })
   }
   const proposedById = new Map(proposed.items.map((i) => [i.id, i]))
+  const baseById = new Map(base.items.map(i => [i.id, i]))
   const changed = new Set(diff.map((d) => d.item_id))
 
   for (const d of diff) {
     const item = proposedById.get(d.item_id)
     if (!item) continue
-    for (const roleId of rolesOfItem(proposed, item)) {
+    const former = baseById.get(d.item_id)
+    const affected = new Set([...rolesOfItem(proposed, item), ...(former ? rolesOfItem(base, former) : [])])
+    for (const roleId of affected) {
       add(roleId, 'ACTION_REQUIRED', {
         item_id: d.item_id,
         title: d.title,
         reason: reasonFor(d),
-        old: { start_at: d.old.start_at, end_at: d.old.end_at },
+        ...(d.old ? { old: { start_at: d.old.start_at, end_at: d.old.end_at } } : {}),
         new: { start_at: d.new.start_at, end_at: d.new.end_at },
         status: d.new.status,
       })
+    }
+  }
+
+  // Konfigurasi tetap dapat mengubah penanggung jawab/batas meskipun jam item tidak berubah.
+  if (delta?.type === 'configure_event' || delta?.type === 'revert_decision') {
+    const changedEvent = (['name', 'timezone', 'stage', 'curfew_at'] as const).some(field => base.event[field] !== proposed.event[field])
+    const beforeResources = new Map(base.resources.map(resource => [resource.id, resource]))
+    const afterResources = new Map(proposed.resources.map(resource => [resource.id, resource]))
+    const beforeRoles = new Map(base.roles.map(role => [role.id, role.label]))
+    for (const item of proposed.items.filter(isActive).filter(item => item.status !== 'completed')) {
+      if (changedEvent) {
+        for (const roleId of rolesOfItem(proposed, item)) add(roleId, 'FYI', { item_id: item.id, title: item.title, reason: 'Konfigurasi acara diperbarui; jadwal item tetap.' })
+      }
+      for (const resourceId of item.resource_ids) {
+        const before = beforeResources.get(resourceId)
+        const after = afterResources.get(resourceId)
+        if (!before || !after) continue
+        const reassigned = JSON.stringify([...before.role_ids].sort()) !== JSON.stringify([...after.role_ids].sort())
+        if (reassigned || before.label !== after.label) {
+          for (const roleId of new Set([...before.role_ids, ...after.role_ids])) add(roleId, reassigned ? 'ACTION_REQUIRED' : 'FYI', {
+            item_id: item.id, title: item.title, reason: `Resource ${after.label}: ${reassigned ? 'peran penanggung jawab berubah' : 'nama diperbarui'}; jadwal item tetap.`,
+          })
+        }
+      }
+      const beforeConstraints = base.constraints.filter(constraint => constraint.item_id === item.id)
+      const afterConstraints = proposed.constraints.filter(constraint => constraint.item_id === item.id)
+      const beforeDependencies = base.dependencies.filter(dependency => dependency.successor_id === item.id)
+      const afterDependencies = proposed.dependencies.filter(dependency => dependency.successor_id === item.id)
+      if (JSON.stringify(beforeConstraints) !== JSON.stringify(afterConstraints) || JSON.stringify(beforeDependencies) !== JSON.stringify(afterDependencies)) {
+        for (const roleId of rolesOfItem(proposed, item)) add(roleId, 'FYI', { item_id: item.id, title: item.title, reason: 'Batas/dependensi item diperbarui; jadwal item tetap.' })
+      }
+      for (const roleId of rolesOfItem(proposed, item)) {
+        const role = proposed.roles.find(role => role.id === roleId)
+        if (role && beforeRoles.get(roleId) !== role.label) add(roleId, 'FYI', { item_id: item.id, title: item.title, reason: `Nama peran diperbarui menjadi ${role.label}; tanggung jawab tetap.` })
+      }
     }
   }
 

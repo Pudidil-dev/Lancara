@@ -14,12 +14,16 @@ export const ItemSchema = z.object({
   pic_role_ids: z.array(Id).max(10),
   resource_ids: z.array(Id).max(10),
   swappable: z.boolean(),
+  segment: z.string().max(80).nullable().optional(),
+  equipment: z.array(z.string().min(1).max(200)).max(20).optional(),
+  notes: z.array(z.string().min(1).max(200)).max(20).optional(),
 })
 
 export const SnapshotSchema = z.object({
   event: z.object({ id: Id, name: z.string().min(1).max(120), timezone: z.string().min(1).max(64), curfew_at: Iso, stage: Id }),
   roles: z.array(z.object({ id: Id, label: z.string().min(1).max(80) })).max(30),
-  items: z.array(ItemSchema).max(30),
+  // Jadwal sehari penuh; pencarian kombinasi engine tetap dibatasi terpisah.
+  items: z.array(ItemSchema).max(60),
   dependencies: z
     .array(z.object({ id: Id, predecessor_id: Id, successor_id: Id, type: z.literal('finish_before_start') }))
     .max(60),

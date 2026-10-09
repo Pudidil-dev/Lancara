@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { Dialog, ErrorState, Loading, StatusBadge, TimeDiff } from '@/components/ui'
 import { useMutation } from '@/hooks/useMutation'
 import { useOnline } from '@/hooks/useOnline'
-import { formatClock, zoneAbbrev } from '@/lib/time'
+import { formatClock, formatRange, zoneAbbrev } from '@/lib/time'
 import { AcknowledgementList } from './AcknowledgementList'
 import type { HistoryDecision } from './types'
 import styles from './briefs.module.css'
@@ -67,8 +67,11 @@ export function DecisionCard({ decision, timezone, relatedChanges }: {
           <h3>{decision.patch_label}</h3>
           <ul className={styles.list}>{decision.diff.map(diff => <li className="stack" key={diff.item_id}>
             <strong>{diff.title}</strong><span className="muted">{diff.item_id}</span>
-            <TimeDiff oldStart={diff.old.start_at} oldEnd={diff.old.end_at} newStart={diff.new.start_at} newEnd={diff.new.end_at} timezone={timezone} cancelled={diff.new.status === 'cancelled'} />
-            {diff.changes.includes('status') && <div className="row"><span className="muted">Status lama</span><StatusBadge kind={diff.old.status} /><span aria-hidden="true">→</span><span className="muted">Status baru</span><StatusBadge kind={diff.new.status} /></div>}
+            {diff.old ? <>
+              <TimeDiff oldStart={diff.old.start_at} oldEnd={diff.old.end_at} newStart={diff.new.start_at} newEnd={diff.new.end_at} timezone={timezone} cancelled={diff.new.status === 'cancelled'} />
+              {diff.changes.includes('status') && <div className="row"><span className="muted">Status lama</span><StatusBadge kind={diff.old.status} /><span aria-hidden="true">→</span><span className="muted">Status baru</span><StatusBadge kind={diff.new.status} /></div>}
+            </> : <div className="stack"><StatusBadge kind="ACTION_REQUIRED" label="Item baru" /><p>Jadwal baru {formatRange(diff.new.start_at, diff.new.end_at, timezone)} {zoneAbbrev(timezone)}</p></div>}
+            {diff.details?.map(detail => <p key={detail.field}>{detail.field}: {detail.old} → {detail.new}</p>)}
           </li>)}</ul>
         </section>
         <p><strong>Alasan koordinator:</strong> {decision.reason}</p>

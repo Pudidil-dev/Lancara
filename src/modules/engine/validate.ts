@@ -1,4 +1,5 @@
 import { isValidIso, toMs } from '@/lib/time'
+import { SnapshotSchema } from '@/modules/events/schema'
 import type { Snapshot, Violation } from './types'
 
 const STATUSES = new Set(['pending', 'in_progress', 'completed', 'cancelled'])
@@ -42,6 +43,9 @@ function findCycle(snapshot: Snapshot): string[] | null {
 }
 
 export function validateSnapshot(snapshot: Snapshot): SnapshotValidation {
+  if (!SnapshotSchema.safeParse(snapshot).success) {
+    return { errors: [v('INVALID_REFERENCE', 'SNAPSHOT', null, 'Struktur rundown tidak valid; periksa item, batas, dan referensi.')], missing: [] }
+  }
   const errors: Violation[] = []
   const missing: Violation[] = []
   const roleIds = new Set(snapshot.roles.map((r) => r.id))

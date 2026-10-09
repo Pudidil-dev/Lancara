@@ -8,6 +8,7 @@ export interface ChangeItem {
 export interface Patch {
   id: string; candidate_id: string; rank: number; label: string; base_version: number
   diff: ItemDiff[]; impact: RoleImpact[]; items_changed: number; total_shift_seconds: number; violations: Violation[]
+  configuration_diff?: Array<{ field: string; old: string; new: string }>
 }
 export interface ChangeDetail {
   change: {
@@ -31,9 +32,10 @@ export interface ChangeDetail {
 export interface ApprovalResult {
   decision_id: string; change_id: string; new_version: number; base_version: number; briefs: number; replayed?: boolean
 }
-export type ManualDelta = Exclude<Delta, { type: 'revert_decision' }>
+export type ManualDelta = Extract<Delta, { type: 'earliest_start' | 'active_end_estimate' | 'cancel_item' }>
 export const CHANGE_TYPE_LABELS = {
-  earliest_start: 'Mulai paling awal', active_end_estimate: 'Estimasi selesai sesi aktif', cancel_item: 'Pembatalan item', revert_decision: 'Kompensasi keputusan',
+  earliest_start: 'Mulai paling awal', active_end_estimate: 'Estimasi selesai sesi aktif', cancel_item: 'Pembatalan item', revert_decision: 'Kompensasi keputusan', revise_rundown: 'Penjadwalan ulang rundown',
+  configure_event: 'Konfigurasi dan format acara',
 }
 export function interpretationOf(detail: ChangeDetail): Interpretation | null {
   return detail.change.draft && 'questions' in detail.change.draft ? detail.change.draft : null

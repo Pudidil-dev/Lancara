@@ -15,7 +15,8 @@ export function inputToIso(value: string, timezone: string) {
 }
 export function ManualForm({ detail, disabled, pending, onConfirm }: { detail: ChangeDetail; disabled: boolean; pending: boolean; onConfirm: (delta: ManualDelta) => Promise<void> }) {
   const interpretation = interpretationOf(detail)
-  const initial = detail.change.confirmed_delta?.type !== 'revert_decision' ? detail.change.confirmed_delta : null
+  const delta = detail.change.confirmed_delta
+  const initial = delta && delta.type !== 'revert_decision' && delta.type !== 'revise_rundown' && delta.type !== 'configure_event' ? delta : null
   const partial = initial ?? interpretation?.partial
   const timezone = detail.event.timezone
   const [type, setType] = useState<ManualDelta['type'] | ''>(partial?.type ?? '')

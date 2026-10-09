@@ -87,8 +87,21 @@ function overlap(a: Item, b: Item): boolean {
  * Validasi seluruh hard constraint terhadap jadwal usulan.
  * `reference` = snapshot kerja (sesudah delta) untuk memeriksa item terkunci.
  */
+/** Istirahat/ishoma dikenali dari judul. Kandidat otomatis tidak boleh menggeser, memangkas, atau membatalkannya. */
+export const BREAK_PATTERN = /ishoma|istirahat|sholat|makan/i
+export function isBreakItem(item: Item): boolean {
+  return BREAK_PATTERN.test(item.title)
+}
+
 export function evaluate(proposed: Snapshot, reference: Snapshot, analysisNow: string): Violation[] {
   const out: Violation[] = []
+  for (const ref of reference.items) {
+    if (!isBreakItem(ref) || ref.status === 'cancelled') continue
+    const item = proposed.items.find((i) => i.id === ref.id)
+    if (item && (item.start_at !== ref.start_at || item.duration_seconds !== ref.duration_seconds || item.status !== ref.status)) {
+      out.push({ rule: 'BREAK_LOCKED', constraint_id: `BREAK-${ref.id}`, item_id: ref.id, message: `${ref.title} adalah istirahat (ishoma) dan tidak boleh digeser, dipangkas, atau dibatalkan.` })
+    }
+  }
   const now = toMs(analysisNow)
   const curfew = toMs(proposed.event.curfew_at)
   const byId = new Map(proposed.items.map((i) => [i.id, i]))

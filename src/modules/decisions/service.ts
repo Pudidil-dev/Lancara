@@ -63,6 +63,12 @@ export async function approve(session: Session, changeId: string, input: Approve
       }
 
       const newVersion = await insertVersion(client, event, patch.proposed_snapshot, 'decision', session.actor_id, `CH-${change.seq}: ${patch.label}`)
+      // Metadata dan label session harus mengikuti snapshot yang baru committed, dalam transaksi yang sama.
+      await client.query('UPDATE events SET name = $2, timezone = $3 WHERE id = $1', [change.event_id, patch.proposed_snapshot.event.name, patch.proposed_snapshot.event.timezone])
+      for (const role of patch.proposed_snapshot.roles) {
+        if (active.roles.find(previous => previous.id === role.id)?.label === role.label) continue
+        await client.query('UPDATE roles SET label = $3 WHERE event_id = $1 AND id = $2', [change.event_id, role.id, role.label])
+      }
       const decision = await client.query<{ id: string; approved_at: Date }>(
         `INSERT INTO decisions (event_id, change_id, patch_id, actor_id, reason, base_version, new_version) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, approved_at`,
         [change.event_id, change.id, patch.id, session.actor_id, input.reason, input.base_version, newVersion],
@@ -76,8 +82,8 @@ export async function approve(session: Session, changeId: string, input: Approve
           change_id: change.id,
           change_seq: Number(change.seq),
           version: newVersion,
-          event_name: event.name,
-          timezone: event.timezone,
+          event_name: patch.proposed_snapshot.event.name,
+          timezone: patch.proposed_snapshot.event.timezone,
           role_id: role.role_id,
           role_label: role.role_label,
           level: role.level,

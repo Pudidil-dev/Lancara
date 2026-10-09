@@ -3,6 +3,8 @@ import { toMs } from '@/lib/time'
 import { diffSnapshots, computeImpact } from './impact'
 import { cloneSnapshot, evaluate, isActive, LOCKED_STATUSES, propagate, sortByStart, type Plan } from './schedule'
 import { validateSnapshot } from './validate'
+import { diffConfiguration, validateConfiguration, validateRevision } from './revision'
+import { isDeepStrictEqual } from 'node:util'
 import {
   ENGINE_VERSION,
   type AnalysisResult,
@@ -25,10 +27,16 @@ interface Draft {
 /** Hash canonical (engine_version + jadwal usulan) → candidate ID stabil, bukan UUID acak. */
 export function candidateIdFor(proposed: Snapshot, constraints = proposed.constraints): string {
   const canonical = sortByStart(proposed.items)
-    .map((i) => `${i.id}|${i.start_at}|${i.duration_seconds}|${i.status}|${i.estimated_end_at ?? ''}`)
+    .map((i) => JSON.stringify([i.id, i.title, i.start_at, i.duration_seconds, i.min_duration_seconds, i.status, i.estimated_end_at, i.pic_role_ids, i.resource_ids, i.swappable]))
     .join(';')
-  const cons = [...constraints].sort((a, b) => a.id.localeCompare(b.id)).map((c) => `${c.id}|${c.type}|${c.item_id}|${c.at}`).join(';')
-  return 'P-' + createHash('sha256').update(`${ENGINE_VERSION}#${canonical}#${cons}`).digest('hex').slice(0, 10)
+  const cons = [...constraints].sort((a, b) => a.id.localeCompare(b.id)).map((c) => JSON.stringify([c.id, c.type, c.item_id, c.at, c.hard, c.note ?? ''])).join(';')
+  const config = JSON.stringify([
+    [proposed.event.id, proposed.event.name, proposed.event.timezone, proposed.event.curfew_at, proposed.event.stage],
+    [...proposed.roles].sort((a, b) => a.id.localeCompare(b.id)).map(role => [role.id, role.label]),
+    [...proposed.resources].sort((a, b) => a.id.localeCompare(b.id)).map(resource => [resource.id, resource.label, resource.role_ids]),
+    [...proposed.dependencies].sort((a, b) => a.id.localeCompare(b.id)).map(dependency => [dependency.id, dependency.predecessor_id, dependency.successor_id, dependency.type]),
+  ])
+  return 'P-' + createHash('sha256').update(`${ENGINE_VERSION}#${canonical}#${cons}#${config}`).digest('hex').slice(0, 10)
 }
 
 function blockerResult(analysisNow: string, blockers: Violation[]): AnalysisResult {
@@ -46,6 +54,8 @@ function blockerResult(analysisNow: string, blockers: Violation[]): AnalysisResu
 export function applyDelta(base: Snapshot, delta: Delta): { working: Snapshot; violations: Violation[] } {
   const working = cloneSnapshot(base)
   if (delta.type === 'revert_decision') return { working, violations: [] }
+  if (delta.type === 'revise_rundown') return { working: cloneSnapshot(delta.snapshot), violations: validateRevision(base, delta.snapshot) }
+  if (delta.type === 'configure_event') return { working: cloneSnapshot(delta.snapshot), violations: validateConfiguration(base, delta.snapshot) }
   const item = working.items.find((i) => i.id === delta.item_id)
   const invalid = (message: string): { working: Snapshot; violations: Violation[] } => ({
     working,
@@ -194,11 +204,16 @@ function reversalDraft(current: Snapshot, delta: Extract<Delta, { type: 'revert_
   for (const item of proposed.items) {
     const b = before.get(item.id)
     const a = after.get(item.id)
+    if (!b && a) {
+      if (LOCKED_STATUSES.has(item.status)) violations.push({ rule: 'LOCKED_ITEM', constraint_id: `LOCK-${item.id}`, item_id: item.id, message: `${item.title} sudah berlangsung/selesai; penambahan tidak dapat dibatalkan.` })
+      else item.status = 'cancelled'
+      continue
+    }
     if (!b || !a) continue
     const changedByDecision =
-      a.start_at !== b.start_at || a.duration_seconds !== b.duration_seconds || a.status !== b.status || a.estimated_end_at !== b.estimated_end_at
+      !isDeepStrictEqual(a, b)
     if (!changedByDecision) continue
-    if (LOCKED_STATUSES.has(item.status) && item.status !== b.status) {
+    if (LOCKED_STATUSES.has(item.status) && (item.status !== b.status || item.title !== b.title || !isDeepStrictEqual(item.pic_role_ids, b.pic_role_ids) || !isDeepStrictEqual(item.resource_ids, b.resource_ids))) {
       violations.push({ rule: 'LOCKED_ITEM', constraint_id: `LOCK-${item.id}`, item_id: item.id, message: `${item.title} sudah ${item.status === 'completed' ? 'selesai' : 'berlangsung'}; aktivitas fisik tidak dapat dikembalikan.` })
       continue
     }
@@ -210,6 +225,10 @@ function reversalDraft(current: Snapshot, delta: Extract<Delta, { type: 'revert_
     item.start_at = b.start_at
     item.duration_seconds = b.duration_seconds
     item.status = b.status === 'cancelled' || b.status === 'pending' ? b.status : item.status
+    item.title = b.title
+    item.pic_role_ids = [...b.pic_role_ids]
+    item.resource_ids = [...b.resource_ids]
+    item.swappable = b.swappable
   }
   const beforeCons = new Map(delta.before.constraints.map((c) => [c.id, c]))
   const afterCons = new Map(delta.after.constraints.map((c) => [c.id, c]))
@@ -218,6 +237,34 @@ function reversalDraft(current: Snapshot, delta: Extract<Delta, { type: 'revert_
     ...proposed.constraints.filter((c) => !touched.has(c.id)),
     ...[...touched].map((id) => beforeCons.get(id)).filter((c): c is NonNullable<typeof c> => !!c),
   ]
+  const beforeDeps = new Map(delta.before.dependencies.map(d => [d.id, d]))
+  const afterDeps = new Map(delta.after.dependencies.map(d => [d.id, d]))
+  const touchedDeps = new Set([...beforeDeps.keys(), ...afterDeps.keys()].filter(id => !isDeepStrictEqual(beforeDeps.get(id), afterDeps.get(id))))
+  proposed.dependencies = [
+    ...proposed.dependencies.filter(d => !touchedDeps.has(d.id)),
+    ...[...touchedDeps].map(id => beforeDeps.get(id)).filter((d): d is NonNullable<typeof d> => !!d),
+  ].sort((a, b) => a.id.localeCompare(b.id))
+  for (const field of ['name', 'timezone', 'stage', 'curfew_at'] as const) {
+    if (delta.before.event[field] !== delta.after.event[field]) proposed.event[field] = delta.before.event[field]
+  }
+  const beforeRoles = new Map(delta.before.roles.map(role => [role.id, role]))
+  const afterRoles = new Map(delta.after.roles.map(role => [role.id, role]))
+  if (!isDeepStrictEqual([...beforeRoles.keys()].sort(), [...afterRoles.keys()].sort())) {
+    violations.push({ rule: 'INVALID_DELTA', constraint_id: 'CONFIGURATION', item_id: null, message: 'Pembatalan konfigurasi tidak boleh mengubah ID/keanggotaan peran.' })
+  } else {
+    for (const role of proposed.roles) {
+      const b = beforeRoles.get(role.id)
+      const a = afterRoles.get(role.id)
+      if (b && a && b.label !== a.label) role.label = b.label
+    }
+  }
+  const beforeResources = new Map(delta.before.resources.map(resource => [resource.id, resource]))
+  const afterResources = new Map(delta.after.resources.map(resource => [resource.id, resource]))
+  const touchedResources = new Set([...beforeResources.keys(), ...afterResources.keys()].filter(id => !isDeepStrictEqual(beforeResources.get(id), afterResources.get(id))))
+  proposed.resources = [
+    ...proposed.resources.filter(resource => !touchedResources.has(resource.id)),
+    ...[...touchedResources].map(id => beforeResources.get(id)).filter((resource): resource is NonNullable<typeof resource> => !!resource).map(resource => structuredClone(resource)),
+  ].sort((a, b) => a.id.localeCompare(b.id))
   proposed.items = sortByStart(proposed.items)
   return { draft: { strategy: 'revert', label: 'Kembalikan item yang diubah keputusan ke jadwal sebelumnya', proposed }, violations }
 }
@@ -240,7 +287,12 @@ export function analyze({ base, delta, analysisNow }: AnalyzeInput): AnalysisRes
   let drafts: Draft[]
   let truncated = false
   let preViolations: Violation[] = []
-  if (delta.type === 'revert_decision') {
+  if (delta.type === 'revise_rundown' || delta.type === 'configure_event') {
+    const violations = delta.type === 'configure_event' ? validateConfiguration(base, delta.snapshot) : validateRevision(base, delta.snapshot)
+    if (violations.length) return blockerResult(analysisNow, violations)
+    working = base
+    drafts = [{ strategy: 'keep', label: delta.type === 'configure_event' ? 'Perbarui konfigurasi acara' : 'Revisi rundown sesuai rekomendasi', proposed: cloneSnapshot(delta.snapshot) }]
+  } else if (delta.type === 'revert_decision') {
     working = base
     const r = reversalDraft(base, delta)
     drafts = [r.draft]
@@ -261,13 +313,15 @@ export function analyze({ base, delta, analysisNow }: AnalyzeInput): AnalysisRes
     const id = candidateIdFor(d.proposed)
     if (seen.has(id)) continue
     seen.add(id)
-    const violations = [...preViolations, ...evaluate(d.proposed, working, analysisNow)]
+    const structure = validateSnapshot(d.proposed)
+    const violations = [...preViolations, ...structure.errors, ...structure.missing, ...evaluate(d.proposed, working, analysisNow)]
     if (violations.length) {
       rejected.push({ candidate_id: id, strategy: d.strategy, label: d.label, violations })
       continue
     }
     const diff = diffSnapshots(base, d.proposed)
-    const changedTiming = diff.filter((x) => isActive(d.proposed.items.find((i) => i.id === x.item_id)!) || x.changes.includes('status'))
+    const configurationDiff = delta.type === 'configure_event' || delta.type === 'revert_decision' ? diffConfiguration(base, d.proposed) : []
+    const changedTiming = diff.filter((x) => isActive(d.proposed.items.find((i) => i.id === x.item_id)!) || (x.kind !== 'added' && x.changes.includes('status')))
     valid.push({
       candidate_id: id,
       rank: 0,
@@ -276,6 +330,7 @@ export function analyze({ base, delta, analysisNow }: AnalyzeInput): AnalysisRes
       items_changed: changedTiming.length,
       total_start_shift_seconds: diff.reduce((sum, x) => sum + Math.abs(x.start_shift_seconds), 0),
       diff,
+      ...(configurationDiff.length ? { configuration_diff: configurationDiff } : {}),
       proposed: d.proposed,
       violations: [],
       impact: computeImpact(base, d.proposed, diff, delta),
@@ -300,14 +355,26 @@ export function analyze({ base, delta, analysisNow }: AnalyzeInput): AnalysisRes
       limit_candidates: SEARCH_LIMITS.candidates,
       limit_items: SEARCH_LIMITS.items,
       truncated,
-      note: 'Pencarian terbatas (geser, tukar pasangan, pangkas ke minimum). Bukan optimasi global; opsi lain mungkin ada.',
+      note: delta.type === 'configure_event' || delta.type === 'revise_rundown' ? 'Validasi satu usulan persis; perubahan menunggu konfirmasi koordinator.' : 'Pencarian terbatas (geser, tukar pasangan, pangkas ke minimum). Bukan optimasi global; opsi lain mungkin ada.',
     },
   }
 }
 
 /** Validasi ulang saat approve: kandidat tersimpan terhadap snapshot aktif + jam server terkini. */
 export function revalidate(proposed: Snapshot, active: Snapshot, analysisNow: string, delta: Delta): Violation[] {
-  if (delta.type === 'revert_decision') return evaluate(proposed, active, analysisNow)
+  const structure = validateSnapshot(proposed)
+  if (structure.errors.length || structure.missing.length) return [...structure.errors, ...structure.missing]
+  if (delta.type === 'revise_rundown' || delta.type === 'configure_event') {
+    const violations = delta.type === 'configure_event' ? validateConfiguration(active, proposed) : validateRevision(active, proposed)
+    if (!isDeepStrictEqual(proposed, delta.snapshot)) violations.push({ rule: 'INVALID_DELTA', constraint_id: 'REVISION', item_id: null, message: 'Usulan tidak sama dengan pratinjau yang dikonfirmasi.' })
+    return [...violations, ...evaluate(proposed, active, analysisNow)]
+  }
+  if (delta.type === 'revert_decision') {
+    const reversal = reversalDraft(active, delta)
+    const violations = [...reversal.violations]
+    if (!isDeepStrictEqual(proposed, reversal.draft.proposed)) violations.push({ rule: 'INVALID_DELTA', constraint_id: 'REVERSAL', item_id: null, message: 'Usulan pembatalan berbeda dari perubahan yang dipratinjau.' })
+    return [...violations, ...evaluate(proposed, active, analysisNow)]
+  }
   const applied = applyDelta(active, delta)
   if (applied.violations.length) return applied.violations
   return evaluate(proposed, applied.working, analysisNow)

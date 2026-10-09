@@ -8,7 +8,8 @@ import { requireCoordinator, requireEvent, type Session } from '@/lib/session'
 import { AiUnavailableError, interpret } from '@/modules/ai'
 import type { Interpretation } from '@/modules/ai/extraction'
 import { analyze } from '@/modules/engine/analyze'
-import type { Delta } from '@/modules/engine/types'
+import { diffConfiguration } from '@/modules/engine/revision'
+import type { Delta, Snapshot } from '@/modules/engine/types'
 import { getEvent, getSnapshot } from '@/modules/events/service'
 
 export const MAX_TEXT = 2000
@@ -205,10 +206,17 @@ export async function getChangeDetail(session: Session, changeId: string) {
   const latest = analyses[0] ?? null
   const patches = latest
     ? await query<Record<string, unknown>>(
-        `SELECT id, candidate_id, rank, strategy, label, base_version, diff, violations, impact, items_changed, total_shift_seconds FROM patches WHERE analysis_id = $1 ORDER BY rank`,
+        `SELECT id, candidate_id, rank, strategy, label, base_version, diff, violations, impact, items_changed, total_shift_seconds, proposed_snapshot FROM patches WHERE analysis_id = $1 ORDER BY rank`,
         [latest.id],
       )
     : []
+  if (latest) {
+    const base = await getSnapshot(change.event_id, Number(latest.base_version))
+    for (const patch of patches) {
+      patch.configuration_diff = diffConfiguration(base, patch.proposed_snapshot as Snapshot)
+      delete patch.proposed_snapshot
+    }
+  }
   const decision = await query<Record<string, unknown>>(
     `SELECT d.id, d.patch_id, d.reason, d.base_version, d.new_version, d.approved_at, a.display_name AS approved_by
        FROM decisions d JOIN actors a ON a.id = d.actor_id WHERE d.change_id = $1`,
