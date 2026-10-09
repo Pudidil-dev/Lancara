@@ -99,3 +99,10 @@ export function zoneAbbrev(timeZone: string): string {
   if (timeZone === 'Asia/Jayapura') return 'WIT'
   return timeZone
 }
+
+/** Jam lokal lengkap "HH:MM:SS" (gaya papan status; dipakai top bar). */
+export function formatClockFull(iso: string, timeZone: string): string {
+  const p = partsInZone(toMs(iso), timeZone)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${pad(p.hour)}:${pad(p.minute)}:${pad(p.second)}`
+}
