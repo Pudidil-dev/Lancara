@@ -41,7 +41,7 @@
   --motion: 150ms;
 
   /* Tipografi (Figma text styles): Plus Jakarta Sans */
-  --font-family: var(--font-jakarta), system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-family: var(--font-jakarta, 'Plus Jakarta Sans'), system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --fs-11: 11px; /* caption 600 / 16 */
   --fs-12: 12px; /* small 400 / 18 */
   --fs-14: 14px; /* body 400 / 22 · label 500 / 20 */

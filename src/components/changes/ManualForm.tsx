@@ -1,4 +1,6 @@
 'use client'
+import { Label, Input, NativeSelect, NativeSelectOption, Button } from '@/components/ui'
+
 import { useState, type FormEvent } from 'react'
 import { addSeconds, formatClock, formatRange, localDate, localToUtc, zoneAbbrev } from '@/lib/time'
 import type { ChangeDetail, ManualDelta } from './types'
@@ -47,19 +49,19 @@ export function ManualForm({ detail, disabled, pending, onConfirm }: { detail: C
     <p className="muted">Form manual selalu tersedia. Konfirmasi menghitung dampak; persetujuan keputusan dilakukan setelah opsi diperiksa.</p>
     {interpretation?.questions.length ? <div className="alert alert-action" id="clarification-questions"><h3>? Kabar perlu klarifikasi</h3><ul>{interpretation.questions.map(q => <li key={q.kind}>{q.message}</li>)}</ul></div> : null}
     <fieldset disabled={disabled} className={styles.question}><legend>Item rundown</legend>
-      {choices?.options?.length ? <div className="stack" role="radiogroup" aria-label={choices.message}>{choices.options.map(option => <label className="check-label" key={option.id}>
-        <input type="radio" name="clarification-item" value={option.id} checked={itemId === option.id} onChange={() => setItemId(option.id)} />
+      {choices?.options?.length ? <div className="stack" role="radiogroup" aria-label={choices.message}>{choices.options.map(option => <Label className="check-label" key={option.id}>
+        <Input type="radio" name="clarification-item" value={option.id} checked={itemId === option.id} onChange={() => setItemId(option.id)} />
         <span>{option.title} · {option.id} · {formatRange(option.start_at, option.end_at, timezone)}</span>
-      </label>)}</div> : null}
-      <div className="field"><label htmlFor="manual-item">Item (ID, judul, jadwal)</label><select id="manual-item" value={itemId} onChange={e => setItemId(e.target.value)} required>
-        <option value="">Pilih item rundown</option>{detail.items.map(item => <option key={item.id} value={item.id}>{item.id} · {item.title} · {formatRange(item.start_at, item.estimated_end_at ?? addSeconds(item.start_at, item.duration_seconds), timezone)}</option>)}
-      </select></div>
+      </Label>)}</div> : null}
+      <div className="field"><Label htmlFor="manual-item">Item (ID, judul, jadwal)</Label><NativeSelect id="manual-item" value={itemId} onChange={e => setItemId(e.target.value)} required>
+        <NativeSelectOption value="">Pilih item rundown</NativeSelectOption>{detail.items.map(item => <NativeSelectOption key={item.id} value={item.id}>{item.id} · {item.title} · {formatRange(item.start_at, item.estimated_end_at ?? addSeconds(item.start_at, item.duration_seconds), timezone)}</NativeSelectOption>)}
+      </NativeSelect></div>
     </fieldset>
-    <div className="field"><label htmlFor="manual-type">Jenis perubahan</label><select id="manual-type" value={type} onChange={e => setType(e.target.value as ManualDelta['type'])} disabled={disabled} required><option value="">Pilih jenis perubahan</option>{(['earliest_start', 'active_end_estimate', 'cancel_item'] as const).map(kind => <option value={kind} key={kind}>{CHANGE_TYPE_LABELS[kind]}</option>)}</select></div>
-    {type && type !== 'cancel_item' && <div className="field"><label htmlFor="manual-value">{type === 'earliest_start' ? 'Mulai paling awal' : 'Estimasi selesai'} ({zoneAbbrev(timezone)})</label><input id="manual-value" type="datetime-local" value={value} onChange={e => setValue(e.target.value)} required disabled={disabled} aria-describedby="manual-value-note" /><p id="manual-value-note" className="muted">Isi jam absolut yang sudah dikonfirmasi kepada pelapor, termasuk untuk kabar relatif seperti “40 menit lagi”.</p></div>}
-    <div className="field"><label htmlFor="manual-reference">Waktu acuan kabar ({zoneAbbrev(timezone)}){needsReference ? ' — wajib diklarifikasi' : ' — opsional'}</label><input id="manual-reference" type="datetime-local" value={reference} onChange={e => setReference(e.target.value)} required={needsReference} disabled={disabled} /></div>
-    {type && type !== 'cancel_item' && <label className="check-label"><input type="checkbox" checked={estimate} onChange={e => setEstimate(e.target.checked)} disabled={disabled} /> Nilai ini merupakan perkiraan</label>}
+    <div className="field"><Label htmlFor="manual-type">Jenis perubahan</Label><NativeSelect id="manual-type" value={type} onChange={e => setType(e.target.value as ManualDelta['type'])} disabled={disabled} required><NativeSelectOption value="">Pilih jenis perubahan</NativeSelectOption>{(['earliest_start', 'active_end_estimate', 'cancel_item'] as const).map(kind => <NativeSelectOption value={kind} key={kind}>{CHANGE_TYPE_LABELS[kind]}</NativeSelectOption>)}</NativeSelect></div>
+    {type && type !== 'cancel_item' && <div className="field"><Label htmlFor="manual-value">{type === 'earliest_start' ? 'Mulai paling awal' : 'Estimasi selesai'} ({zoneAbbrev(timezone)})</Label><Input id="manual-value" type="datetime-local" value={value} onChange={e => setValue(e.target.value)} required disabled={disabled} aria-describedby="manual-value-note" /><p id="manual-value-note" className="muted">Isi jam absolut yang sudah dikonfirmasi kepada pelapor, termasuk untuk kabar relatif seperti “40 menit lagi”.</p></div>}
+    <div className="field"><Label htmlFor="manual-reference">Waktu acuan kabar ({zoneAbbrev(timezone)}){needsReference ? ' — wajib diklarifikasi' : ' — opsional'}</Label><Input id="manual-reference" type="datetime-local" value={reference} onChange={e => setReference(e.target.value)} required={needsReference} disabled={disabled} /></div>
+    {type && type !== 'cancel_item' && <Label className="check-label"><Input type="checkbox" checked={estimate} onChange={e => setEstimate(e.target.checked)} disabled={disabled} /> Nilai ini merupakan perkiraan</Label>}
     {validation && <p role="alert" className="alert alert-blocker">! {validation}</p>}
-    <button className="btn btn-primary" type="submit" disabled={disabled || !complete}>{pending ? 'Menghitung dampak…' : 'Konfirmasi tafsiran'}</button>
+    <Button variant="default" className="btn btn-primary" type="submit" disabled={disabled || !complete}>{pending ? 'Menghitung dampak…' : 'Konfirmasi tafsiran'}</Button>
   </form>
 }

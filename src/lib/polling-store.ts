@@ -1,4 +1,4 @@
-import type { ApiError } from './api-client'
+import { ApiError } from './api-client'
 
 export interface PollingSnapshot<T> {
   data: T | null
@@ -45,7 +45,16 @@ export function createPollingStore(load: (path: string) => Promise<unknown>, can
     const revision = entry.revision
     const task = (async () => {
       try {
-        const data = await load(path)
+        let data: unknown
+        for (let attempt = 0; ; attempt++) {
+          try { data = await load(path); break }
+          catch (error) {
+            if (attempt >= 2 || !(error instanceof ApiError) || !['NETWORK', 'TIMEOUT', 'STORAGE_UNAVAILABLE'].includes(error.code) || revision !== entry.revision || !canFetch()) throw error
+            // Keep the last snapshot visible while transport recovers; share this request across consumers.
+            await new Promise(resolve => setTimeout(resolve, attempt === 0 ? 300 : 1000))
+            if (revision !== entry.revision || !canFetch()) return
+          }
+        }
         // GET yang dimulai sebelum commit/logout tidak boleh mengembalikan data lama ke layar.
         if (revision !== entry.revision) return
         entry.updatedAt = Date.now()

@@ -1,8 +1,11 @@
 'use client'
+import { Label, Input, Button } from '@/components/ui'
+
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState, type FormEvent } from 'react'
 import { api, ApiError } from '@/lib/api-client'
+import { userErrorMessage } from '@/lib/error-feedback'
 import { BRAND_WORDMARK } from '@/lib/brand'
 import { resetQueries } from '@/hooks/usePolling'
 
@@ -32,7 +35,7 @@ export function AuthScreen({ mode }: { mode: Mode }) {
       resetQueries()
       router.replace('/rundown')
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Tidak dapat terhubung ke server.')
+      setError(e instanceof ApiError && e.code === 'UNAUTHENTICATED' ? 'Username atau password belum sesuai. Periksa kembali lalu coba lagi.' : userErrorMessage(e, 'read'))
       setPending(false)
     }
   }
@@ -47,10 +50,10 @@ export function AuthScreen({ mode }: { mode: Mode }) {
         </Link>
         <form className="auth-form" onSubmit={submit}>
           <div className="auth-heading"><h1>{copy.title}</h1><p>{copy.subtitle}</p></div>
-          <div className="auth-field"><label htmlFor="auth-username">Username</label><input id="auth-username" name="username" autoComplete="username" autoFocus value={username} onChange={(e) => setUsername(e.target.value)} /></div>
-          <div className="auth-field"><label htmlFor="auth-password">Password</label><input id="auth-password" name="password" type="password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} value={password} onChange={(e) => setPassword(e.target.value)} /></div>
-          {error && <p className="lc-alert" role="alert">{error}</p>}
-          <button type="submit" className="btn-gradient auth-submit" disabled={pending}>{pending ? copy.busy : copy.button}</button>
+          <div className="auth-field"><Label htmlFor="auth-username">Username</Label><Input id="auth-username" name="username" autoComplete="username" autoFocus required disabled={pending} aria-invalid={!!error || undefined} aria-describedby={error ? 'auth-error' : undefined} value={username} onChange={(e) => { setUsername(e.target.value); setError('') }} /></div>
+          <div className="auth-field"><Label htmlFor="auth-password">Password</Label><Input id="auth-password" name="password" type="password" required disabled={pending} aria-invalid={!!error || undefined} aria-describedby={error ? 'auth-error' : undefined} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} value={password} onChange={(e) => { setPassword(e.target.value); setError('') }} /></div>
+          {error && <p id="auth-error" className="lc-alert" role="alert">{error}</p>}
+          <Button variant="default" type="submit" className="btn-gradient auth-submit" loading={pending}>{pending ? copy.busy : copy.button}</Button>
           <p className="auth-switch">{copy.switchText} <Link href={copy.switchHref}>{copy.switchLink}</Link></p>
         </form>
       </section>

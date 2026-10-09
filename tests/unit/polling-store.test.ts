@@ -105,19 +105,36 @@ describe('pengambilan data workspace bersama', () => {
     expect(store.getSnapshot('/rundown').data).toBeNull()
   })
 
-  it('gagal mengambil data tetap dapat retry tanpa kehilangan data sebelumnya', async () => {
+  it('gangguan sementara pulih otomatis tanpa menampilkan error atau menghilangkan data sebelumnya', async () => {
     const error = new ApiError('NETWORK', 'Tidak ada koneksi.', 0, null, null)
     const load = vi.fn().mockResolvedValueOnce({ version: 1 }).mockRejectedValueOnce(error).mockResolvedValue({ version: 2 })
     const store = createPollingStore(load)
     const stop = store.subscribe('/rundown', vi.fn(), 0)
     await store.refresh('/rundown')
     await store.refresh('/rundown')
-    expect(store.getSnapshot('/rundown').error).toBe(error)
-    expect(store.getSnapshot<{ version: number }>('/rundown').data?.version).toBe(1)
-    await store.refresh('/rundown')
     expect(store.getSnapshot('/rundown').error).toBeNull()
     expect(store.getSnapshot<{ version: number }>('/rundown').data?.version).toBe(2)
     stop()
+  })
+
+  it('retry dibatasi tiga percobaan dan kegagalan berkepanjangan mempertahankan data terakhir', async () => {
+    const error = new ApiError('TIMEOUT', 'internal', 0, null, null)
+    const load = vi.fn().mockResolvedValueOnce({ version: 1 }).mockRejectedValue(error)
+    const store = createPollingStore(load)
+    await store.refresh('/rundown')
+    await store.refresh('/rundown')
+    expect(load).toHaveBeenCalledTimes(4)
+    expect(store.getSnapshot('/rundown').error).toBe(error)
+    expect(store.getSnapshot<{ version: number }>('/rundown').data?.version).toBe(1)
+  })
+
+  it('error otorisasi tidak dicoba ulang', async () => {
+    const error = new ApiError('UNAUTHENTICATED', 'internal', 401, null, null)
+    const load = vi.fn().mockRejectedValue(error)
+    const store = createPollingStore(load)
+    await store.refresh('/rundown')
+    expect(load).toHaveBeenCalledOnce()
+    expect(store.getSnapshot('/rundown').error).toBe(error)
   })
 
   it('tidak polling saat offline/tersembunyi dan hanya menyegarkan query aktif saat kembali', async () => {

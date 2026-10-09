@@ -1,6 +1,6 @@
 'use client'
 
-import { ErrorState, Loading, StatusBadge, TimeDiff } from '@/components/ui'
+import { ErrorState, Loading, StatusBadge, TimeDiff , Button } from '@/components/ui'
 import { useMutation } from '@/hooks/useMutation'
 import { useOnline } from '@/hooks/useOnline'
 import { formatClock, zoneAbbrev } from '@/lib/time'
@@ -31,10 +31,10 @@ export function BriefCard({ brief, acknowledgedAt, onAcknowledged, onShowRevisio
     {brief.superseded_by && <div className="stack">
       <StatusBadge kind="OLD_REVISION" label="Brief versi lama" />
       <p className="muted">Membaca versi ini tidak menandai revisi baru sebagai sudah dibaca.</p>
-      <a className="btn" href={`#brief-${brief.superseded_by.id}`} onClick={event => {
+      <Button asChild variant="outline"><a className="btn" href={`#brief-${brief.superseded_by.id}`} onClick={event => {
         event.preventDefault()
         onShowRevision(brief.superseded_by!.id)
-      }}>Lihat revisi terbaru · CH-{brief.superseded_by.change_seq} v{brief.superseded_by.version}</a>
+      }}>Lihat revisi terbaru · CH-{brief.superseded_by.change_seq} v{brief.superseded_by.version}</a></Button>
     </div>}
     <ul className={styles.list}>{payload.entries.map((entry, index) => <li className="stack" key={`${entry.item_id}-${index}`}>
       <h3>{entry.title}</h3>
@@ -51,7 +51,7 @@ export function BriefCard({ brief, acknowledgedAt, onAcknowledged, onShowRevisio
         <StatusBadge kind="ACKNOWLEDGED" />
         <p>Sudah dibaca pukul {formatClock(acknowledgedAt, payload.timezone)} {zoneAbbrev(payload.timezone)} untuk perubahan CH-{payload.change_seq} versi {brief.version}{brief.ack_by ? ` · ${brief.ack_by}` : ''}.</p>
       </div> : <>
-        <button className="btn btn-primary btn-full" disabled={mutation.pending || !online} onClick={() => void acknowledge()}>Sudah dibaca</button>
+        <Button variant="default" className="btn btn-primary btn-full" disabled={mutation.pending || !online} onClick={() => void acknowledge()}>Sudah dibaca</Button>
         <p className="muted">Konfirmasi bahwa Anda sudah membaca brief; status aksi lapangan tetap terpisah.</p>
       </>}
       {mutation.pending && <Loading label="Mencatat sudah dibaca…" />}

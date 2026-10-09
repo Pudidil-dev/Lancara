@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Dialog, ErrorState, Loading, StatusBadge, TimeDiff } from '@/components/ui'
+import { Dialog, ErrorState, Loading, StatusBadge, TimeDiff , Button, Label, Textarea } from '@/components/ui'
 import { useMutation } from '@/hooks/useMutation'
 import { useOnline } from '@/hooks/useOnline'
 import { formatClock, formatRange, zoneAbbrev } from '@/lib/time'
@@ -78,8 +78,8 @@ export function DecisionCard({ decision, timezone, relatedChanges }: {
         <p className="muted">Penyetuju: {decision.approved_by}</p>
         <AcknowledgementList acks={decision.acks} timezone={timezone} />
         <div className={`row ${styles.actions}`}>
-          <button className="btn" disabled={!online} onClick={() => openDialog('correction')}>Ajukan koreksi</button>
-          <button className="btn btn-danger" disabled={!online} onClick={() => openDialog('compensation')}>Batalkan keputusan</button>
+          <Button variant="outline" className="btn" disabled={!online} onClick={() => openDialog('correction')}>Ajukan koreksi</Button>
+          <Button variant="destructive" className="btn btn-danger" disabled={!online} onClick={() => openDialog('compensation')}>Batalkan keputusan</Button>
         </div>
       </div>
     </details>
@@ -87,15 +87,15 @@ export function DecisionCard({ decision, timezone, relatedChanges }: {
       <form className="stack" onSubmit={event => { event.preventDefault(); void createDraft() }}>
         {dialog === 'compensation' ? <p>Pembatalan membuat versi kompensasi baru setelah tafsiran dikonfirmasi dan opsi disetujui. Riwayat tetap tersimpan. Aktivitas yang sudah berlangsung tidak bisa dikembalikan.</p> : <p>Koreksi membuat kabar baru yang mereferensikan keputusan ini. Tafsiran dan opsi tetap perlu diperiksa sebelum disetujui.</p>}
         <div className="field">
-          <label htmlFor={`decision-text-${decision.id}`}>{dialog === 'correction' ? 'Kabar koreksi (opsional)' : 'Alasan pembatalan (opsional)'}</label>
-          <textarea id={`decision-text-${decision.id}`} maxLength={dialog === 'compensation' ? 500 : 2000} rows={4} value={text} onChange={event => setText(event.target.value)} disabled={mutation.pending} />
+          <Label htmlFor={`decision-text-${decision.id}`}>{dialog === 'correction' ? 'Kabar koreksi (opsional)' : 'Alasan pembatalan (opsional)'}</Label>
+          <Textarea id={`decision-text-${decision.id}`} maxLength={dialog === 'compensation' ? 500 : 2000} rows={4} value={text} onChange={event => setText(event.target.value)} disabled={mutation.pending} />
         </div>
         {dialog === 'correction' && <p className="muted">Biarkan kosong untuk menggunakan form manual.</p>}
         <div aria-live="polite">{mutation.pending && <Loading label="Membuat draft perubahan…" />}</div>
         {mutation.error && <ErrorState error={mutation.error} />}
         <div className="row">
-          <button className="btn" type="button" disabled={mutation.pending} onClick={() => setDialog(null)}>Kembali</button>
-          <button className="btn btn-primary" type="submit" disabled={mutation.pending || !online}>{dialog === 'compensation' ? 'Lanjut ke konfirmasi' : 'Buat draft koreksi'}</button>
+          <Button variant="outline" className="btn" type="button" disabled={mutation.pending} onClick={() => setDialog(null)}>Kembali</Button>
+          <Button variant="default" className="btn btn-primary" type="submit" disabled={mutation.pending || !online}>{dialog === 'compensation' ? 'Lanjut ke konfirmasi' : 'Buat draft koreksi'}</Button>
         </div>
       </form>
     </Dialog>

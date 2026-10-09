@@ -1,4 +1,4 @@
-import { StatusBadge, TimeDiff } from '@/components/ui'
+import { StatusBadge, TimeDiff , Button } from '@/components/ui'
 import { formatDuration, formatRange, zoneAbbrev } from '@/lib/time'
 import type { Patch } from './types'
 import styles from './changes.module.css'
@@ -27,6 +27,6 @@ export function PatchCard({ patch, timezone, selected, onSelect, disabled }: { p
         {!entry.old && entry.new && <p>Jadwal baru {formatRange(entry.new.start_at, entry.new.end_at, timezone)} {zoneAbbrev(timezone)}</p>}
       </li>)}</ul> : <p className="muted">Tidak ada perubahan untuk peran ini; tidak menerima brief.</p>}
     </section>)}</div></details>
-    {onSelect && <button type="button" className={`btn btn-full ${selected ? 'btn-primary' : ''}`} aria-pressed={selected} onClick={onSelect} disabled={disabled}>{selected ? 'Opsi dipilih' : 'Pilih opsi ini'}</button>}
+    {onSelect && <Button variant={selected ? 'default' : 'outline'} type="button" className="btn btn-full" aria-pressed={selected} onClick={onSelect} disabled={disabled}>{selected ? 'Opsi dipilih' : 'Pilih opsi ini'}</Button>}
   </article>
 }

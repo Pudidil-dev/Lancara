@@ -2,12 +2,13 @@
 import Link from 'next/link'
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { AppShell } from '@/components/shell/AppShell'
-import { ConstraintAlert, Dialog, EmptyState, ErrorState, Loading, StatusBadge } from '@/components/ui'
+import { ConstraintAlert, Dialog, EmptyState, ErrorState, Loading, StatusBadge , Button, Label, Textarea } from '@/components/ui'
 import { checkRequest, useMutation } from '@/hooks/useMutation'
 import { useOnline } from '@/hooks/useOnline'
 import { refreshQueries, usePolling } from '@/hooks/usePolling'
 import { useSession } from '@/hooks/useSession'
-import { ApiError } from '@/lib/api-client'
+import { ApiError, toApiError } from '@/lib/api-client'
+import { userErrorMessage } from '@/lib/error-feedback'
 import { formatClock, zoneAbbrev } from '@/lib/time'
 import { InterpretationCard } from './InterpretationCard'
 import { ManualForm } from './ManualForm'
@@ -15,7 +16,7 @@ import { PatchCard } from './PatchCard'
 import type { ApprovalResult, ChangeDetail, ManualDelta } from './types'
 import styles from './changes.module.css'
 
-const asApiError = (error: unknown) => error instanceof ApiError ? error : new ApiError('INTERNAL', (error as Error).message, 500, null, null)
+const asApiError = toApiError
 type ApprovalIntent = { path: string; body: { patch_id: string; base_version: number; reason: string } }
 
 export function ChangeDetailScreen({ id, initialParseError }: { id: string; initialParseError: string | null }) {
@@ -69,7 +70,7 @@ export function ChangeDetailScreen({ id, initialParseError }: { id: string; init
         if (status.status === 'committed') completeRef.current(status.result)
         else { setRecovery('not_found'); setRecoveryMessage(status.note) }
       } catch (error) {
-        if (!stopped && !settled.current) { setRecovery('failed'); setRecoveryMessage(asApiError(error).message) }
+        if (!stopped && !settled.current) { setRecovery('failed'); setRecoveryMessage(userErrorMessage(error)) }
       } finally { running = false }
     }
     void poll()
@@ -126,7 +127,7 @@ export function ChangeDetailScreen({ id, initialParseError }: { id: string; init
     catch (error) {
       if (settled.current) return
       const failure = asApiError(error)
-      if (failure.code === 'TIMEOUT' || failure.code === 'NETWORK' || (retry && !['STALE_VERSION', 'CONTEXT_CHANGED', 'INVALID_STATE'].includes(failure.code))) { setRecovery(failure.code === 'TIMEOUT' || failure.code === 'NETWORK' ? 'checking' : 'failed'); setRecoveryMessage(failure.message); setUncertain(true) }
+      if (['TIMEOUT', 'NETWORK', 'INVALID_RESPONSE', 'STORAGE_UNAVAILABLE'].includes(failure.code) || (retry && !['STALE_VERSION', 'CONTEXT_CHANGED', 'INVALID_STATE'].includes(failure.code))) { setRecovery(['TIMEOUT', 'NETWORK', 'INVALID_RESPONSE', 'STORAGE_UNAVAILABLE'].includes(failure.code) ? 'checking' : 'failed'); setRecoveryMessage(userErrorMessage(failure, 'write')); setUncertain(true) }
       else {
         // A confirmed rejection of this exact retry resolves the previous unknown request.
         setUncertain(false); setActionError(failure)
@@ -153,33 +154,33 @@ export function ChangeDetailScreen({ id, initialParseError }: { id: string; init
       {actionError && modal === null && <ErrorState error={actionError} />}
       {(data.change.status === 'draft' || data.change.status === 'needs_clarification' || editing) && <>
         {parseFailure && <p className="alert alert-action" role="alert">! {parseFailure === 'AI_UNAVAILABLE' ? 'Penafsir tidak tersedia. Gunakan form manual; draft tetap tersimpan.' : 'Tafsiran belum tersedia. Gunakan form manual; draft tetap tersimpan.'}</p>}
-        <div className="grid-two"><div className="stack"><InterpretationCard detail={data} />{owner && data.change.original_text && !editing && <button className="btn" disabled={busy || !online} onClick={() => void parseAgain()}>{parser.pending ? 'Menafsirkan…' : 'Tafsirkan ulang'}</button>}</div>
-          {owner ? data.change.kind === 'compensation' ? <section className="card stack"><h2>Konfirmasi kompensasi</h2><p>Kompensasi dihitung dari versi aktif v{data.event.active_version}. Konfirmasi akan memeriksa batas dan aktivitas yang terkunci; belum menyetujui keputusan.</p><button className="btn btn-primary" disabled={busy || !online} onClick={() => void analyse()}>Konfirmasi tafsiran</button></section> : <ManualForm key={`${id}-${manualRevision}`} detail={data} disabled={busy || !online} pending={action.pending} onConfirm={delta => analyse(delta)} /> : <EmptyState title="Hanya pelapor atau koordinator yang dapat mengonfirmasi tafsiran." />}
-        </div>{editing && <button className="btn" disabled={busy} onClick={() => setEditing(false)}>Kembali ke opsi</button>}
+        <div className="grid-two"><div className="stack"><InterpretationCard detail={data} />{owner && data.change.original_text && !editing && <Button variant="outline" className="btn" disabled={busy || !online} onClick={() => void parseAgain()}>{parser.pending ? 'Menafsirkan…' : 'Tafsirkan ulang'}</Button>}</div>
+          {owner ? data.change.kind === 'compensation' ? <section className="card stack"><h2>Konfirmasi kompensasi</h2><p>Kompensasi dihitung dari versi aktif v{data.event.active_version}. Konfirmasi akan memeriksa batas dan aktivitas yang terkunci; belum menyetujui keputusan.</p><Button variant="default" className="btn btn-primary" disabled={busy || !online} onClick={() => void analyse()}>Konfirmasi tafsiran</Button></section> : <ManualForm key={`${id}-${manualRevision}`} detail={data} disabled={busy || !online} pending={action.pending} onConfirm={delta => analyse(delta)} /> : <EmptyState title="Hanya pelapor atau koordinator yang dapat mengonfirmasi tafsiran." />}
+        </div>{editing && <Button variant="outline" className="btn" disabled={busy} onClick={() => setEditing(false)}>Kembali ke opsi</Button>}
       </>}
       {data.analysis && !editing && <>
         <section className="card stack"><h2>Perbandingan opsi pemulihan</h2><div className={styles.meta}><span>Basis v{data.analysis.base_version}</span><span>Dihitung pukul {formatClock(data.analysis.analysis_now, data.event.timezone, data.server_now)} {zoneAbbrev(data.event.timezone)}</span><span>Engine {data.analysis.engine_ms} ms</span><span>{data.analysis_count} analisis</span></div><InterpretationCard detail={data} /></section>
-        {(data.stale || contextChanged) && active && <section className="alert alert-action" role="alert"><h3>↻ {data.stale ? `Rundown sudah berubah ke v${data.event.active_version}. Hitung ulang dari versi terkini.` : 'Kondisi sudah berubah sejak analisis. Hitung ulang dari kondisi terkini.'}</h3>{owner && <button className="btn" disabled={busy || !online} onClick={() => void analyse(undefined, true)}>Hitung ulang</button>}</section>}
+        {(data.stale || contextChanged) && active && <section className="alert alert-action" role="alert"><h3>↻ {data.stale ? `Rundown sudah berubah ke v${data.event.active_version}. Hitung ulang dari versi terkini.` : 'Kondisi sudah berubah sejak analisis. Hitung ulang dari kondisi terkini.'}</h3>{owner && <Button variant="outline" className="btn" disabled={busy || !online} onClick={() => void analyse(undefined, true)}>Hitung ulang</Button>}</section>}
         {data.analysis.blockers.length > 0 ? <ConstraintAlert violations={data.analysis.blockers} title={data.analysis.blockers.some(v => v.rule === 'MISSING_DATA') ? 'DATA BELUM LENGKAP' : 'ANALISIS TERHALANG — periksa batas berikut'} timezone={data.event.timezone} /> : data.patches.length === 0 ? <section className="card stack"><h2>! TIDAK ADA OPSI FEASIBLE dalam pencarian ini.</h2><p>{data.analysis.search_meta.note}</p><p className="muted">{data.analysis.search_meta.evaluated} kandidat diperiksa · {data.analysis.search_meta.valid} lolos{data.analysis.search_meta.truncated ? ' · Pencarian dibatasi' : ''}</p><div className="stack">{data.analysis.rejected.map(candidate => <details key={candidate.candidate_id}><summary>{candidate.label} · {candidate.candidate_id}</summary><ConstraintAlert violations={candidate.violations} title="Batas yang menghalangi opsi" timezone={data.event.timezone} /></details>)}</div></section> : <>
           <p className="alert alert-action">✓ Lolos batas yang tercatat. Periksa kondisi lapangan sebelum menyetujui.</p>
           <div className={styles.patches}>{data.patches.map(option => <PatchCard key={option.id} patch={option} timezone={data.event.timezone} selected={selected === option.id || data.decision?.patch_id === option.id} disabled={busy || !online || data.stale || contextChanged} onSelect={authenticated && active ? () => setSelected(option.id) : undefined} />)}</div>
         </>}
-        {active && owner && <div className="row">{authenticated && data.patches.length > 0 && !data.analysis.blockers.length && <button className="btn btn-primary" disabled={!canApprove} onClick={openApproval}>Setujui opsi terpilih</button>}{!data.stale && !contextChanged && <button className="btn" disabled={busy || !online} onClick={() => void analyse(undefined, true)}>Hitung ulang</button>}{data.change.kind !== 'compensation' && <button className="btn" disabled={busy} onClick={() => setEditing(true)}>Perbaiki tafsiran</button>}{authenticated && <button className="btn btn-danger" disabled={busy || !online} onClick={() => { setReason(''); setActionError(null); rejection.reset(); setModal('reject') }}>Tolak kabar</button>}{authenticated && <Link href="/rundown/setup" className="btn">Perbaiki setup rundown</Link>}</div>}
+        {active && owner && <div className="row">{authenticated && data.patches.length > 0 && !data.analysis.blockers.length && <Button variant="default" className="btn btn-primary" disabled={!canApprove} onClick={openApproval}>Setujui opsi terpilih</Button>}{!data.stale && !contextChanged && <Button variant="outline" className="btn" disabled={busy || !online} onClick={() => void analyse(undefined, true)}>Hitung ulang</Button>}{data.change.kind !== 'compensation' && <Button variant="outline" className="btn" disabled={busy} onClick={() => setEditing(true)}>Perbaiki tafsiran</Button>}{authenticated && <Button variant="destructive" className="btn btn-danger" disabled={busy || !online} onClick={() => { setReason(''); setActionError(null); rejection.reset(); setModal('reject') }}>Tolak kabar</Button>}{authenticated && <Button asChild variant="outline"><Link href="/rundown/setup" className="btn">Perbaiki setup rundown</Link></Button>}</div>}
       </>}
       {data.decision && !approved && <section className="alert alert-success"><h2>✓ Disetujui sebagai v{data.decision.new_version}</h2><p>{data.decision.approved_by} · {formatClock(data.decision.approved_at, data.event.timezone, data.server_now)} {zoneAbbrev(data.event.timezone)}</p><p>Alasan: {data.decision.reason}</p>{authenticated && <Link href="/history">Lihat Riwayat</Link>}</section>}
       {data.change.status === 'rejected' && <section className="alert alert-blocker"><h2>! Kabar ditolak</h2><p>{data.change.reject_reason}</p></section>}
-      <div className="row"><Link href="/rundown" className="btn">Kirim kabar lain lewat AI</Link><Link href="/rundown" className="btn">Lihat rundown aktif</Link></div>
+      <div className="row"><Button asChild variant="outline"><Link href="/rundown" className="btn">Kirim kabar lain lewat AI</Link></Button><Button asChild variant="outline"><Link href="/rundown" className="btn">Lihat rundown aktif</Link></Button></div>
     </div>}
     <Dialog open={modal === 'approve'} title="Setujui perubahan rundown" busy={unresolved} onClose={() => { if (!unresolved) setModal(null) }}>
       <form className="stack" onSubmit={event => { event.preventDefault(); if (!uncertain) void sendApproval() }}>
         <p><strong>{patch?.label ?? 'Opsi terpilih'}</strong></p><p>Rundown v{data?.change.base_version} → v{(data?.change.base_version ?? 0) + 1}. {patch?.items_changed} item berubah; {patch?.impact.filter(role => role.level === 'ACTION_REQUIRED' || role.level === 'FYI').length} peran menerima brief.</p>
         <p className="muted">Periksa kondisi lapangan sebelum menyetujui. Keputusan, rundown versi baru, dan brief disimpan bersama.</p>
-        <div className="field"><label htmlFor="approve-reason">Alasan persetujuan</label><textarea id="approve-reason" value={reason} onChange={event => setReason(event.target.value)} required minLength={3} maxLength={500} disabled={unresolved} /></div>
-        <div aria-live="polite" role="status">{approval.pending && <Loading label="Menyimpan keputusan…" />}{uncertain && <div className="alert alert-action stack"><p>! Status penyimpanan belum diketahui. Memeriksa permintaan…</p>{recoveryMessage && <p>{recoveryMessage}</p>}<p className="muted">Pemeriksaan berlanjut saat koneksi tersedia. Percobaan ulang memakai permintaan dan alasan yang sama.</p>{recovery === 'not_found' && <button className="btn" type="button" disabled={approval.pending || !online} onClick={() => void sendApproval(true)}>Coba lagi</button>}</div>}</div>
+        <div className="field"><Label htmlFor="approve-reason">Alasan persetujuan</Label><Textarea id="approve-reason" value={reason} onChange={event => setReason(event.target.value)} required minLength={3} maxLength={500} disabled={unresolved} /></div>
+        <div aria-live="polite" role="status">{approval.pending && <Loading label="Menyimpan keputusan…" />}{uncertain && <div className="stack"><Loading label="Menyelesaikan penyimpanan perubahan…" />{recovery === 'failed' && recoveryMessage && <p className="muted">{recoveryMessage}</p>}{recovery === 'not_found' && <Button variant="outline" className="btn" type="button" disabled={approval.pending || !online} onClick={() => void sendApproval(true)}>Coba lagi</Button>}</div>}</div>
         {actionError && <ErrorState error={actionError} />}
-        {!uncertain && <div className="row"><button type="submit" className="btn btn-primary" disabled={!canApprove || reason.trim().length < 3}>Setujui dan kirim brief</button><button className="btn" type="button" disabled={approval.pending} onClick={() => setModal(null)}>Kembali</button></div>}
+        {!uncertain && <div className="row"><Button variant="default" type="submit" className="btn btn-primary" disabled={!canApprove || reason.trim().length < 3}>Setujui dan kirim brief</Button><Button variant="outline" className="btn" type="button" disabled={approval.pending} onClick={() => setModal(null)}>Kembali</Button></div>}
       </form>
     </Dialog>
-    <Dialog open={modal === 'reject'} title="Tolak kabar perubahan" busy={rejection.pending} onClose={() => setModal(null)}><form className="stack" onSubmit={reject}><p>Penolakan mencatat alasan; rundown aktif tetap pada versi yang sama.</p><div className="field"><label htmlFor="reject-reason">Alasan penolakan</label><textarea id="reject-reason" value={reason} onChange={event => setReason(event.target.value)} required minLength={3} maxLength={500} disabled={rejection.pending} /></div>{rejection.pending && <Loading label="Menyimpan penolakan…" />}{actionError && <ErrorState error={actionError} />}<button type="submit" className="btn btn-danger" disabled={rejection.pending || !online || reason.trim().length < 3}>Tolak kabar</button></form></Dialog>
+    <Dialog open={modal === 'reject'} title="Tolak kabar perubahan" busy={rejection.pending} onClose={() => setModal(null)}><form className="stack" onSubmit={reject}><p>Penolakan mencatat alasan; rundown aktif tetap pada versi yang sama.</p><div className="field"><Label htmlFor="reject-reason">Alasan penolakan</Label><Textarea id="reject-reason" value={reason} onChange={event => setReason(event.target.value)} required minLength={3} maxLength={500} disabled={rejection.pending} /></div>{rejection.pending && <Loading label="Menyimpan penolakan…" />}{actionError && <ErrorState error={actionError} />}<Button variant="destructive" type="submit" className="btn btn-danger" disabled={rejection.pending || !online || reason.trim().length < 3}>Tolak kabar</Button></form></Dialog>
   </AppShell>
 }

@@ -6,24 +6,31 @@ import { useSession } from '@/hooks/useSession'
 import { usePolling } from '@/hooks/usePolling'
 import { useMutation } from '@/hooks/useMutation'
 import { useOnline } from '@/hooks/useOnline'
-import { EVENT_ID, RUNDOWN_PATH, type RundownResponse } from '@/hooks/types'
-import { ErrorState, Icon, Loading, type IconName } from '@/components/ui'
+import type { RundownResponse } from '@/hooks/types'
+import { useEvent } from '@/hooks/useEvent'
+import { ErrorState, Icon, type IconName , Button, Label, Input } from '@/components/ui'
+import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
 import { Brand } from './Brand'
 import { PageHeaderContext } from './PageHeader'
 import { PRODUCT_NAME } from '@/lib/brand'
+import { EventSwitcher } from './EventSwitcher'
+import { WorkspaceLoading } from './WorkspaceLoading'
 
 interface NavLink {
   href: string
   label: string
   icon: IconName
   match: (pathname: string) => boolean
+  /** Figma Lancara/Sidebar/Notifications: item aktif berupa pil putih dengan teks brand. */
+  pill?: boolean
 }
 
-/** Menu sesuai Figma Ripple/Sidebar: Dashboard, Rundown, Konfirmasi perubahan, Riwayat, Pengaturan. */
+/** Menu sesuai Figma Ripple/Sidebar: Dashboard, Rundown, Perubahan Langsung, Notifikasi, Riwayat, Pengaturan. */
 const NAVIGATION: NavLink[] = [
   { href: '/rundown', label: 'Dashboard', icon: 'layout-grid', match: (p) => p === '/rundown' || p.startsWith('/changes/') },
   { href: '/rundown/setup', label: 'Rundown', icon: 'calendar-days', match: (p) => p.startsWith('/rundown/setup') || p.startsWith('/rundown/new') },
-  { href: '/inbox', label: 'Konfirmasi perubahan', icon: 'inbox', match: (p) => p.startsWith('/inbox') },
+  { href: '/inbox', label: 'Perubahan Langsung', icon: 'inbox', match: (p) => p.startsWith('/inbox') },
+  { href: '/notifications', label: 'Notifikasi', icon: 'bell-line', match: (p) => p.startsWith('/notifications'), pill: true },
   { href: '/history', label: 'Riwayat', icon: 'history', match: (p) => p.startsWith('/history') },
   { href: '/settings', label: 'Pengaturan', icon: 'settings-2', match: (p) => p.startsWith('/settings') },
 ]
@@ -50,10 +57,11 @@ interface AppShellProps {
 /** Shell Figma: sidebar ungu 224px (Ripple/Sidebar) + top bar 80px + konten. Mobile: drawer lewat tombol menu. */
 export function AppShell({ children, title, description, actions, topbar = 'event', hideTitle = false }: AppShellProps) {
   const { session, loading, error, refresh } = useSession()
+  const { eventId: EVENT_ID, rundownPath: RUNDOWN_PATH } = useEvent()
   const online = useOnline()
-  // Session dan rundown dapat dimuat bersamaan; endpoint rundown tetap memeriksa session server.
+  // ID acara mengikuti sesi server; endpoint rundown tetap memeriksa akses pada setiap request.
   const query = usePolling<RundownResponse>(loading || session ? RUNDOWN_PATH : null)
-  const inbox = usePolling<{ briefs: Array<{ acknowledged_at: string | null }> }>(session ? `/api/events/${EVENT_ID}/inbox` : null, { intervalMs: 15000 })
+  const notifications = usePolling<{ unread: number }>(session && EVENT_ID ? `/api/events/${EVENT_ID}/notifications/feed` : null, { intervalMs: 15000 })
   const logout = useMutation()
   const router = useRouter()
   const pathname = usePathname()
@@ -88,49 +96,49 @@ export function AppShell({ children, title, description, actions, topbar = 'even
     router.push(term ? `/rundown?q=${encodeURIComponent(term)}` : '/rundown')
   }
 
-  if (loading) return <main className="container"><Loading label="Memuat sesi…" /></main>
-  if (error) return <main className="container"><ErrorState error={error} onRetry={() => void refresh()} /></main>
-  if (!session) return <main className="container"><Loading label="Membuka pilihan akun…" /></main>
+  if (loading) return <WorkspaceLoading />
+  if (error && (!session || error.status === 401 || error.status === 403)) return <main className="container"><ErrorState error={error} onRetry={() => void refresh()} /></main>
+  if (!session) return <WorkspaceLoading label="Membuka halaman masuk…" />
   const eventName = query.data?.event.name ?? 'Memuat acara…'
-  const unread = (inbox.data?.briefs ?? []).filter((brief) => !brief.acknowledged_at).length
+  const unread = notifications.data?.unread ?? 0
   return <>
     <a className="skip-link" href="#main">Lewati ke isi</a>
     <div className="app-shell" data-collapsed={collapsed || undefined} data-menu={menuOpen ? 'open' : undefined}>
       <aside className="sidebar" id="app-sidebar" aria-label={PRODUCT_NAME}>
         <div className="sidebar-brand">
           <Brand />
-          <button type="button" className="sidebar-icon-btn sidebar-collapse" aria-pressed={collapsed} aria-label={collapsed ? 'Lebarkan menu' : 'Ciutkan menu'} onClick={toggleCollapsed}><Icon name="panel-left-close" /></button>
+          <Button variant="ghost" size="icon" type="button" className="sidebar-icon-btn sidebar-collapse" aria-pressed={collapsed} aria-label={collapsed ? 'Lebarkan menu' : 'Ciutkan menu'} onClick={toggleCollapsed}><Icon name="panel-left-close" /></Button>
         </div>
         <nav className="sidebar-nav" aria-label="Navigasi utama">
-          {NAVIGATION.map((link) => <Link key={link.href} href={link.href} className="nav-item" title={collapsed ? link.label : undefined} aria-current={link.match(pathname) ? 'page' : undefined}>
+          {NAVIGATION.map((link) => <Link key={link.href} href={link.href} className="nav-item" data-pill={link.pill || undefined} title={collapsed ? link.label : undefined} aria-current={link.match(pathname) ? 'page' : undefined}>
             <Icon name={link.icon} /><span className="nav-label">{link.label}</span>
           </Link>)}
         </nav>
         <div className="sidebar-footer" ref={accountRef}>
           {accountOpen && <div className="role-menu" role="menu" aria-label="Akun">
             <p>{session.display_name}</p>
-            <button type="button" role="menuitem" disabled={logout.pending || !online} onClick={() => void exit()}>{logout.pending ? 'Keluar…' : 'Keluar'}</button>
+            <Button variant="ghost" type="button" role="menuitem" disabled={logout.pending || !online} onClick={() => void exit()}>{logout.pending ? 'Keluar…' : 'Keluar'}</Button>
           </div>}
-          <button type="button" className="role-card" aria-haspopup="menu" aria-expanded={accountOpen} onClick={() => setAccountOpen((v) => !v)}>
+          <Button variant="ghost" type="button" className="role-card" aria-haspopup="menu" aria-expanded={accountOpen} onClick={() => setAccountOpen((v) => !v)}>
             <span className="role-avatar" aria-hidden="true">{initials(session.display_name)}</span>
             <span className="role-text"><span className="role-name">{session.role_label}</span><span className="role-sub">Ruang kendali</span></span>
-          </button>
+          </Button>
         </div>
       </aside>
-      <button type="button" className="sidebar-backdrop" aria-label="Tutup menu" tabIndex={-1} onClick={() => setMenuOpen(false)} />
+      <Button variant="ghost" type="button" className="sidebar-backdrop" aria-label="Tutup menu" tabIndex={-1} onClick={() => setMenuOpen(false)} />
       <div className="workspace">
         <header className="topbar">
           {topbar === 'search'
             ? <form className="topbar-search" role="search" onSubmit={submitSearch}>
                 <Icon name="search" />
-                <label htmlFor="topbar-search" className="sr-only">Cari rundown</label>
-                <input id="topbar-search" type="search" placeholder="Cari rundown anda..." value={search} onChange={(e) => setSearch(e.target.value)} />
+                <Label htmlFor="topbar-search" className="sr-only">Cari rundown</Label>
+                <Input id="topbar-search" type="search" placeholder="Cari rundown anda..." value={search} onChange={(e) => setSearch(e.target.value)} />
               </form>
-            : <div className="topbar-title"><span>{eventName}</span><Icon name="chevrons-down-up" /></div>}
+            : <EventSwitcher eventName={eventName} eventId={session.event_id} />}
           <span className="topbar-spacer" />
-          <Link href="/inbox" className="topbar-bell" data-unread={unread > 0 || undefined} aria-label={unread ? `Konfirmasi perubahan: ${unread} brief belum dibaca` : 'Konfirmasi perubahan'}><Icon name="bell-line" /></Link>
-          <Link href="/rundown/new" className="btn-gradient"><span className="btn-label">Tambah Rundown</span><Icon name="plus" /></Link>
-          <button type="button" className="topbar-menu" aria-label="Buka menu" aria-controls="app-sidebar" aria-expanded={menuOpen} onClick={() => setMenuOpen(true)}><span /></button>
+          <Button asChild variant="ghost" size="icon" className="topbar-bell"><Link href="/notifications" data-unread={unread > 0 || undefined} aria-label={unread ? `Notifikasi: ${unread} belum dibaca` : 'Notifikasi'}><Icon name="bell-line" /></Link></Button>
+          <Button asChild size="lg" className="btn-gradient"><Link href="/rundown/new" aria-label="Tambah Rundown"><span className="btn-label">Tambah Rundown</span><Icon name="plus" size={20} /></Link></Button>
+          <Button variant="ghost" size="icon" type="button" className="topbar-menu" aria-label="Buka menu" aria-controls="app-sidebar" aria-expanded={menuOpen} onClick={() => setMenuOpen(true)}><span /></Button>
         </header>
         <main id="main" className="page-content">
           <div aria-live="polite">{!online && <p className="alert alert-action">! Tidak ada koneksi. Perubahan memerlukan server.</p>}</div>
@@ -140,7 +148,7 @@ export function AppShell({ children, title, description, actions, topbar = 'even
             <div className="page-title-copy"><h1>{title ?? eventName}</h1>{description && <p>{description}</p>}<div className="page-title-description" ref={setDescriptionSlot} /></div>
             <div className="page-title-actions" ref={setActionsSlot}>{actions}</div>
           </div>}
-          <PageHeaderContext.Provider value={slots}>{children}</PageHeaderContext.Provider>
+          <PageHeaderContext.Provider value={slots}><ErrorBoundary key={session.event_id}>{children}</ErrorBoundary></PageHeaderContext.Provider>
         </main>
       </div>
     </div>

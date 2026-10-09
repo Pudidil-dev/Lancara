@@ -58,7 +58,17 @@ export function route<P = Record<string, string>>(operation: string, handler: Ha
         }
       }
       const params = ((await ctx?.params) ?? {}) as P
-      const data = await handler(req, { params, requestId })
+      let data: unknown
+      for (let attempt = 0; ; attempt++) {
+        try { data = await handler(req, { params, requestId }); break }
+        catch (error) {
+          // Retry only reads after a known transient storage failure. Never replay a mutation.
+          if (req.method !== 'GET' || opts.mutation || opts.multipart || opts.webhook || attempt >= 1 || req.signal.aborted || !(error instanceof AppError) || error.code !== 'STORAGE_UNAVAILABLE') throw error
+          log('warn', 'request.read_recovery', { request_id: requestId, operation, attempt: attempt + 1, result: error.code })
+          await new Promise(resolve => setTimeout(resolve, 250))
+          if (req.signal.aborted) throw error
+        }
+      }
       log('info', 'request', { request_id: requestId, operation, result: 'ok', ms: Math.round(performance.now() - started) })
       if (data instanceof NextResponse) {
         data.headers.set('x-request-id', requestId)
