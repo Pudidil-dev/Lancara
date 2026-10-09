@@ -4,7 +4,7 @@ import { DEMO_24H_CLOCK, demoSnapshot24h } from './fixture-24h'
 
 export type DemoProfile = 'demo' | '24h'
 
-const ALL_TABLES = ['parse_usage', 'requests', 'acknowledgements', 'briefs', 'decisions', 'patches', 'analyses', 'changes', 'versions', 'demo_sessions', 'actors', 'roles', 'events']
+const ALL_TABLES = ['parse_usage', 'requests', 'acknowledgements', 'briefs', 'decisions', 'patches', 'analyses', 'changes', 'versions', 'demo_sessions', 'users', 'actors', 'roles', 'events']
 
 /**
  * Seed fixture demo. Tanpa `reset`, hanya membuat data bila event belum ada (tidak pernah menghapus otomatis).

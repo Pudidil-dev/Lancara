@@ -1,11 +1,11 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
-import type { NextRequest } from 'next/server'
+import { NextResponse, type NextRequest } from 'next/server'
 import { query } from './db'
 import { env } from './env'
 import { AppError } from './errors'
 
 export const SESSION_COOKIE = 'ripple_session'
-/** Satu akun otorisasi aplikasi; PIC/peran dalam rundown tetap data operasional. */
+/** Akun demo bawaan. Akun hasil register ada di tabel users; aktor PIC lain tidak bisa login. PIC/peran dalam rundown tetap data operasional. */
 export const SINGLE_ACCOUNT_ACTOR_ID = 'act-rina'
 export const AUTHORIZATION_ROLE_ID = 'koordinator'
 export const AUTHORIZATION_ROLE_LABEL = 'Koordinator'
@@ -39,9 +39,9 @@ export function decodeCookie(value: string | undefined): string | null {
 }
 
 export async function createSession(actorId: string): Promise<{ id: string; expires: Date }> {
-  if (actorId !== SINGLE_ACCOUNT_ACTOR_ID) throw new AppError('UNAUTHENTICATED', 'Gunakan akun utama LANCARA.')
-  const actor = await query('SELECT id FROM actors WHERE id = $1', [actorId])
-  if (!actor.length) throw new AppError('NOT_FOUND', 'Akun utama LANCARA belum tersedia.')
+  // Hanya akun demo bawaan atau akun terdaftar (users) yang boleh punya sesi; aktor PIC operasional tidak.
+  const actor = await query('SELECT a.id FROM actors a WHERE a.id = $1 AND (a.id = $2 OR EXISTS (SELECT 1 FROM users u WHERE u.actor_id = a.id))', [actorId, SINGLE_ACCOUNT_ACTOR_ID])
+  if (!actor.length) throw new AppError('UNAUTHENTICATED', 'Akun tidak dapat masuk ke LANCARA.')
   const id = randomBytes(24).toString('base64url')
   const expires = new Date(Date.now() + SESSION_HOURS * 3600_000)
   await query('INSERT INTO demo_sessions (id, actor_id, expires_at) VALUES ($1, $2, $3)', [id, actorId, expires])
@@ -54,7 +54,8 @@ export async function loadSession(sessionId: string): Promise<Session | null> {
             $3::text AS role_id, $4::text AS role_label, 'coordinator'::text AS capability
        FROM demo_sessions s
        JOIN actors a ON a.id = s.actor_id
-      WHERE s.id = $1 AND s.expires_at > now() AND a.id = $2`,
+      WHERE s.id = $1 AND s.expires_at > now()
+        AND (a.id = $2 OR EXISTS (SELECT 1 FROM users u WHERE u.actor_id = a.id))`,
     [sessionId, SINGLE_ACCOUNT_ACTOR_ID, AUTHORIZATION_ROLE_ID, AUTHORIZATION_ROLE_LABEL],
   )
   return rows[0] ?? null
@@ -73,12 +74,17 @@ export async function requireSession(req: NextRequest): Promise<Session> {
 }
 
 export function requireCoordinator(session: Session): void {
-  // Invariant identitas session tunggal, bukan pembatas akses berdasarkan PIC di rundown.
-  if (session.actor_id !== SINGLE_ACCOUNT_ACTOR_ID || session.capability !== 'coordinator') {
-    throw new AppError('UNAUTHENTICATED', 'Gunakan akun utama LANCARA yang telah masuk.')
-  }
+  // Session hanya dimuat untuk akun yang boleh login (demo bawaan atau terdaftar); semuanya berwenang penuh.
+  if (session.capability !== 'coordinator') throw new AppError('UNAUTHENTICATED', 'Masuk dengan akun LANCARA terlebih dahulu.')
 }
 
 export function requireEvent(session: Session, eventId: string): void {
   if (session.event_id !== eventId) throw new AppError('NOT_FOUND', 'Event tidak tersedia untuk session ini.')
+}
+
+/** Pasang cookie sesi pada respons (dipakai login, register, dan pilih akun demo). */
+export function sessionResponse(created: { id: string; expires: Date }): NextResponse {
+  const res = NextResponse.json({ data: { ok: true } })
+  res.cookies.set(SESSION_COOKIE, encodeCookie(created.id), { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', path: '/', expires: created.expires })
+  return res
 }
