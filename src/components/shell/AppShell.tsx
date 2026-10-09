@@ -26,10 +26,9 @@ const dashboard: NavLink = { href: '/rundown', label: 'Dashboard', icon: 'layout
 const changes: NavLink = { href: '/changes/new', label: 'Perubahan', icon: 'calendar-days', match: (p) => p.startsWith('/changes') }
 const history: NavLink = { href: '/history', label: 'Riwayat & konfirmasi', icon: 'history', match: (p) => p.startsWith('/history') }
 const setup: NavLink = { href: '/rundown/setup', label: 'Pengaturan', icon: 'settings-2', match: (p) => p.startsWith('/rundown/setup') }
-const inbox: NavLink = { href: '/inbox', label: 'Inbox kru', icon: 'inbox', match: (p) => p.startsWith('/inbox') }
+const inbox: NavLink = { href: '/inbox', label: 'Inbox', icon: 'inbox', match: (p) => p.startsWith('/inbox') }
 
-const COORDINATOR_NAV = [dashboard, changes, history, setup, inbox]
-const CREW_NAV = [inbox, changes, { ...dashboard, label: 'Rundown' }]
+const NAVIGATION = [dashboard, changes, history, setup, inbox]
 
 function initials(name: string): string {
   const words = name.replace(/[()]/g, ' ').split(/\s+/).filter(Boolean)
@@ -57,7 +56,6 @@ export function AppShell({ children, title, description, actions }: { children: 
   if (!session) return <main className="container"><Loading label="Membuka pilihan akun…" /></main>
   const tz = query.data?.event.timezone ?? 'Asia/Jakarta'
   const zone = zoneAbbrev(tz)
-  const links = session.capability === 'coordinator' ? COORDINATOR_NAV : CREW_NAV
   const connection = online && !query.error ? '● Terhubung' : online ? '! Gagal memperbarui' : '○ Offline'
   return <>
     <a className="skip-link" href="#main">Lewati ke isi</a>
@@ -65,7 +63,7 @@ export function AppShell({ children, title, description, actions }: { children: 
       <aside className="sidebar" aria-label={PRODUCT_NAME}>
         <Brand />
         <nav className="sidebar-nav" aria-label="Navigasi utama">
-          {links.map((link) => <Link key={link.href} href={link.href} className="nav-item" aria-current={link.match(pathname) ? 'page' : undefined}>
+          {NAVIGATION.map((link) => <Link key={link.href} href={link.href} className="nav-item" aria-current={link.match(pathname) ? 'page' : undefined}>
             <Icon name={link.icon} />{link.label}{link.href === '/rundown' && session.capability === 'crew' && <span className="sr-only"> · hanya baca</span>}
           </Link>)}
         </nav>
@@ -84,7 +82,7 @@ export function AppShell({ children, title, description, actions }: { children: 
           <span className="topbar-sep" aria-hidden="true">/</span>
           <span className="topbar-stage">Panggung utama</span>
           <span className="topbar-spacer" />
-          <span className="badge badge-warning">Simulasi peran demo</span>
+          <span className="badge badge-warning">Demo</span>
           <span className="badge badge-neutral version-tag">Rundown {query.data ? `v${query.data.version}` : '…'}</span>
           <span className="topbar-clock" title="Jam simulasi">{query.data ? `${formatClockFull(query.data.server_now, tz)} ${zone}` : '…'}</span>
         </header>

@@ -19,7 +19,7 @@ async function main() {
     const result = await seedDemo(client as never, { reset: process.argv.includes('--reset'), profile })
     await client.query('COMMIT')
     const count = profile === '24h' ? '38 item' : '12 item'
-    process.stdout.write(result.seeded ? `seed demo selesai (${count}, 7 akun demo)\n` :'event demo sudah ada; tidak ada perubahan (pakai --reset untuk mengulang)\n')
+    process.stdout.write(result.seeded ? `seed demo selesai (${count}, 1 akun utama)\n` :'event demo sudah ada; tidak ada perubahan (pakai --reset untuk mengulang)\n')
   } catch (error) {
     await client.query('ROLLBACK')
     throw error

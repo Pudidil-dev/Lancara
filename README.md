@@ -2,7 +2,7 @@
 
 Live Event Recovery Engine: satu kabar perubahan → opsi jadwal yang lolos batas → persetujuan koordinator → brief ke kru terdampak → konfirmasi "Sudah dibaca" → riwayat keputusan.
 
-> Data fiktif. Peran adalah **simulasi peran demo**, bukan autentikasi produksi.
+> Data fiktif. Satu akun utama mendapat akses penuh koordinator. Perubahan AI Agent disimpan setelah konfirmasi.
 
 ## Status
 

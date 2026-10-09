@@ -7,6 +7,6 @@ import { ErrorState, Loading } from '@/components/ui'
 export default function Home() {
   const query = usePolling<SessionResponse>('/api/session')
   const router = useRouter()
-  useEffect(() => { if (query.data) router.replace(!query.data.session ? '/login' : query.data.session.capability === 'coordinator' ? '/rundown' : '/inbox') }, [query.data, router])
+  useEffect(() => { if (query.data) router.replace(!query.data.session ? '/login' : '/rundown') }, [query.data, router])
   return <main className="container">{query.error ? <ErrorState error={query.error} onRetry={() => void query.refresh()} /> : <Loading label="Membuka ruang kerja…" />}</main>
 }

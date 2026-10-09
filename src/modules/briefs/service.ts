@@ -19,9 +19,10 @@ interface BriefRow {
   ack_by: string | null
 }
 
-/** Inbox hanya untuk peran session (server-side). Brief lama ditandai bila ada revisi lebih baru untuk item yang sama. */
+/** Akun utama membaca semua brief PIC acara. Supersession tetap terikat penerima dan item. */
 export async function inbox(session: Session, eventId: string) {
   requireEvent(session, eventId)
+  requireCoordinator(session)
   const event = await getEvent(eventId)
   const rows = await query<BriefRow>(
     `SELECT b.id, b.decision_id, b.change_id, b.version, b.recipient_role_id, b.level, b.payload, b.rendered, b.created_at,
@@ -29,18 +30,19 @@ export async function inbox(session: Session, eventId: string) {
        FROM briefs b
        LEFT JOIN acknowledgements k ON k.brief_id = b.id AND k.role_id = b.recipient_role_id
        LEFT JOIN actors a ON a.id = k.actor_id
-      WHERE b.event_id = $1 AND b.recipient_role_id = $2
+      WHERE b.event_id = $1
       ORDER BY b.version DESC
       LIMIT 50`,
-    [eventId, session.role_id],
+    [eventId],
   )
   const briefs = rows.map((b) => {
     const items = new Set(b.payload.entries.map((e) => e.item_id))
-    const newer = rows.find((o) => o.version > b.version && o.payload.entries.some((e) => items.has(e.item_id)))
+    const newer = rows.find((o) => o.recipient_role_id === b.recipient_role_id && o.version > b.version && o.payload.entries.some((e) => items.has(e.item_id)))
     return { ...b, superseded_by: newer ? { id: newer.id, version: newer.version, change_seq: newer.payload.change_seq } : null }
   })
   return {
     role: { id: session.role_id, label: session.role_label },
+    scope: 'event' as const,
     active_version: event.active_version,
     server_now: serverNow(event.sim_clock_at),
     unread: briefs.filter((b) => !b.acknowledged_at).length,
@@ -50,6 +52,7 @@ export async function inbox(session: Session, eventId: string) {
 
 /** "Sudah dibaca": unik per (brief, role); klik berulang tidak menggandakan; tidak menutup revisi lain. */
 export async function acknowledge(session: Session, briefId: string) {
+  requireCoordinator(session)
   if (!/^[0-9a-f-]{36}$/i.test(briefId)) throw new AppError('NOT_FOUND', 'Brief tidak ditemukan.')
   return withTransaction(async (client) => {
     const brief = await client.query<{ id: string; event_id: string; recipient_role_id: string; change_id: string; version: number; seq: number }>(
@@ -58,13 +61,12 @@ export async function acknowledge(session: Session, briefId: string) {
     )
     const row = brief.rows[0]
     if (!row || row.event_id !== session.event_id) throw new AppError('NOT_FOUND', 'Brief tidak ditemukan.')
-    if (row.recipient_role_id !== session.role_id) throw new AppError('FORBIDDEN', 'Brief ini bukan untuk peran Anda.')
     await client.query(`INSERT INTO acknowledgements (brief_id, role_id, actor_id) VALUES ($1, $2, $3) ON CONFLICT (brief_id, role_id) DO NOTHING`, [
       row.id,
-      session.role_id,
+      row.recipient_role_id,
       session.actor_id,
     ])
-    const ack = await client.query<{ acknowledged_at: Date }>('SELECT acknowledged_at FROM acknowledgements WHERE brief_id = $1 AND role_id = $2', [row.id, session.role_id])
+    const ack = await client.query<{ acknowledged_at: Date }>('SELECT acknowledged_at FROM acknowledgements WHERE brief_id = $1 AND role_id = $2', [row.id, row.recipient_role_id])
     return { brief_id: row.id, change_id: row.change_id, change_seq: Number(row.seq), version: row.version, acknowledged_at: ack.rows[0].acknowledged_at }
   })
 }

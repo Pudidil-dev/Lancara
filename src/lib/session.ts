@@ -5,6 +5,10 @@ import { env } from './env'
 import { AppError } from './errors'
 
 export const SESSION_COOKIE = 'ripple_session'
+/** Satu akun otorisasi aplikasi; PIC/peran dalam rundown tetap data operasional. */
+export const SINGLE_ACCOUNT_ACTOR_ID = 'act-rina'
+export const AUTHORIZATION_ROLE_ID = 'koordinator'
+export const AUTHORIZATION_ROLE_LABEL = 'Koordinator'
 const SESSION_HOURS = 12
 
 export interface Session {
@@ -14,7 +18,7 @@ export interface Session {
   event_id: string
   role_id: string
   role_label: string
-  capability: 'coordinator' | 'crew'
+  capability: 'coordinator'
 }
 
 function sign(id: string): string {
@@ -35,8 +39,9 @@ export function decodeCookie(value: string | undefined): string | null {
 }
 
 export async function createSession(actorId: string): Promise<{ id: string; expires: Date }> {
+  if (actorId !== SINGLE_ACCOUNT_ACTOR_ID) throw new AppError('UNAUTHENTICATED', 'Gunakan akun utama LANCARA.')
   const actor = await query('SELECT id FROM actors WHERE id = $1', [actorId])
-  if (!actor.length) throw new AppError('NOT_FOUND', 'Akun demo tidak ditemukan.')
+  if (!actor.length) throw new AppError('NOT_FOUND', 'Akun utama LANCARA belum tersedia.')
   const id = randomBytes(24).toString('base64url')
   const expires = new Date(Date.now() + SESSION_HOURS * 3600_000)
   await query('INSERT INTO demo_sessions (id, actor_id, expires_at) VALUES ($1, $2, $3)', [id, actorId, expires])
@@ -45,12 +50,12 @@ export async function createSession(actorId: string): Promise<{ id: string; expi
 
 export async function loadSession(sessionId: string): Promise<Session | null> {
   const rows = await query<Session>(
-    `SELECT s.id AS session_id, a.id AS actor_id, a.display_name, a.event_id, r.id AS role_id, r.label AS role_label, r.capability
+    `SELECT s.id AS session_id, a.id AS actor_id, a.display_name, a.event_id,
+            $3::text AS role_id, $4::text AS role_label, 'coordinator'::text AS capability
        FROM demo_sessions s
        JOIN actors a ON a.id = s.actor_id
-       JOIN roles r ON r.event_id = a.event_id AND r.id = a.role_id
-      WHERE s.id = $1 AND s.expires_at > now()`,
-    [sessionId],
+      WHERE s.id = $1 AND s.expires_at > now() AND a.id = $2`,
+    [sessionId, SINGLE_ACCOUNT_ACTOR_ID, AUTHORIZATION_ROLE_ID, AUTHORIZATION_ROLE_LABEL],
   )
   return rows[0] ?? null
 }
@@ -63,12 +68,15 @@ export async function sessionFromRequest(req: NextRequest): Promise<Session | nu
 /** Actor, event, dan role SELALU dari session server — tidak pernah dari body client. */
 export async function requireSession(req: NextRequest): Promise<Session> {
   const session = await sessionFromRequest(req)
-  if (!session) throw new AppError('UNAUTHENTICATED', 'Session tidak ada atau kedaluwarsa. Pilih akun demo lagi.')
+  if (!session) throw new AppError('UNAUTHENTICATED', 'Session tidak ada atau kedaluwarsa. Masuk melalui akun utama LANCARA.')
   return session
 }
 
 export function requireCoordinator(session: Session): void {
-  if (session.capability !== 'coordinator') throw new AppError('FORBIDDEN', 'Hanya koordinator yang dapat melakukan operasi ini.')
+  // Invariant identitas session tunggal, bukan pembatas akses berdasarkan PIC di rundown.
+  if (session.actor_id !== SINGLE_ACCOUNT_ACTOR_ID || session.capability !== 'coordinator') {
+    throw new AppError('UNAUTHENTICATED', 'Gunakan akun utama LANCARA yang telah masuk.')
+  }
 }
 
 export function requireEvent(session: Session, eventId: string): void {

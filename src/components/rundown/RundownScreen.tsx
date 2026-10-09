@@ -41,7 +41,7 @@ export function RundownScreen() {
   const [resetOpen, setResetOpen] = useState(false)
   const [clock, setClock] = useState('')
   const [notice, setNotice] = useState('')
-  const coordinator = session?.capability === 'coordinator'
+  const canManage = !!session
   if (!data) return error ? <ErrorState error={error} onRetry={refresh} /> : <Loading label="Memuat rundown…" />
   const { snapshot, version, server_now: now } = data
   const zone = snapshot.event.timezone
@@ -65,7 +65,7 @@ export function RundownScreen() {
   async function resetDemo() {
     try { await mutation.mutate({ path: '/api/demo/reset', idempotent: false }); router.replace('/login') } catch { /* Error rendered below. */ }
   }
-  const action = (item: Item) => coordinator && (item.status === 'pending' || item.status === 'in_progress')
+  const action = (item: Item) => canManage && (item.status === 'pending' || item.status === 'in_progress')
     ? <button type="button" className="btn btn-compact" disabled={disabled} onClick={() => void changeStatus(item)} aria-label={`${item.status === 'pending' ? 'Mulai' : 'Selesai'} ${item.title}`}>{item.status === 'pending' ? 'Mulai' : 'Selesai'}</button> : undefined
   return <div className="stack">
     <PageDescription>{items.length} item · {productionRoleCount(snapshot)} peran produksi · Semua waktu dalam {zoneAbbrev(zone)}</PageDescription>
@@ -73,7 +73,7 @@ export function RundownScreen() {
     {data.validation.errors.length + data.validation.missing.length > 0 && <ConstraintAlert title="DATA BELUM LENGKAP — periksa rundown" violations={[...data.validation.errors, ...data.validation.missing]} />}
     {error && <ErrorState error={error} onRetry={refresh} />}{mutation.error && <ErrorState error={mutation.error} />}
     <div role="status" aria-live="polite">{mutation.pending ? 'Menyimpan perubahan…' : notice}</div>
-    {items.length === 0 ? <EmptyState title="Rundown belum disiapkan." action={coordinator ? <Link className="btn" href="/rundown/setup">Siapkan rundown</Link> : undefined} /> : <>
+    {items.length === 0 ? <EmptyState title="Rundown belum disiapkan." action={canManage ? <Link className="btn" href="/rundown/setup">Siapkan rundown</Link> : undefined} /> : <>
       <SummaryCards snapshot={snapshot} now={now} changes={changes.data} />
       <div className="rundown-board">
         <section className="panel" aria-labelledby="rundown-title">
@@ -96,7 +96,7 @@ export function RundownScreen() {
         </div>
       </div>
     </>}
-    {coordinator && data.demo_mode && <section className="card stack" aria-labelledby="clock-heading"><div className="row between"><h2 id="clock-heading">Jam simulasi (demo)</h2><span className="metric">{formatClock(now, zone)} {zoneAbbrev(zone)}</span></div><div className="row"><button className="btn" disabled={disabled} onClick={() => void setSimClock(addSeconds(now, 300))}>+5 mnt</button><button className="btn" disabled={disabled} onClick={() => void setSimClock(addSeconds(now, 900))}>+15 mnt</button><button className="btn" disabled={disabled} onClick={() => void setSimClock(null)}>Kembali ke jam default</button></div><form className="row" onSubmit={e => { e.preventDefault(); if (clock) void setSimClock(localToUtc(localDate(now, zone), clock, zone)) }}><div className="field"><label htmlFor="sim-clock">Set jam ({zoneAbbrev(zone)})</label><input id="sim-clock" type="time" required value={clock} onChange={e => setClock(e.target.value)} /></div><button className="btn" disabled={disabled || !clock}>Set jam</button></form><button className="btn btn-danger" disabled={disabled} onClick={() => setResetOpen(true)}>Reset data demo</button></section>}
-    <Dialog open={resetOpen} title="Reset data demo?" onClose={() => setResetOpen(false)} busy={mutation.pending}><p>Seluruh perubahan, keputusan, dan brief demo akan dihapus. Semua akun akan keluar. Rundown kembali ke data awal.</p><div className="row"><button className="btn" disabled={mutation.pending} onClick={() => setResetOpen(false)}>Batal</button><button className="btn btn-danger" disabled={disabled} onClick={() => void resetDemo()}>{mutation.pending ? 'Mereset…' : 'Ya, reset data demo'}</button></div>{mutation.error && <ErrorState error={mutation.error} />}</Dialog>
+    {canManage && data.demo_mode && <section className="card stack" aria-labelledby="clock-heading"><div className="row between"><h2 id="clock-heading">Jam simulasi (demo)</h2><span className="metric">{formatClock(now, zone)} {zoneAbbrev(zone)}</span></div><div className="row"><button className="btn" disabled={disabled} onClick={() => void setSimClock(addSeconds(now, 300))}>+5 mnt</button><button className="btn" disabled={disabled} onClick={() => void setSimClock(addSeconds(now, 900))}>+15 mnt</button><button className="btn" disabled={disabled} onClick={() => void setSimClock(null)}>Kembali ke jam default</button></div><form className="row" onSubmit={e => { e.preventDefault(); if (clock) void setSimClock(localToUtc(localDate(now, zone), clock, zone)) }}><div className="field"><label htmlFor="sim-clock">Set jam ({zoneAbbrev(zone)})</label><input id="sim-clock" type="time" required value={clock} onChange={e => setClock(e.target.value)} /></div><button className="btn" disabled={disabled || !clock}>Set jam</button></form><button className="btn btn-danger" disabled={disabled} onClick={() => setResetOpen(true)}>Reset data demo</button></section>}
+    <Dialog open={resetOpen} title="Reset data demo?" onClose={() => setResetOpen(false)} busy={mutation.pending}><p>Seluruh perubahan, keputusan, dan brief demo akan dihapus. Anda akan keluar. Rundown kembali ke data awal.</p><div className="row"><button className="btn" disabled={mutation.pending} onClick={() => setResetOpen(false)}>Batal</button><button className="btn btn-danger" disabled={disabled} onClick={() => void resetDemo()}>{mutation.pending ? 'Mereset…' : 'Ya, reset data demo'}</button></div>{mutation.error && <ErrorState error={mutation.error} />}</Dialog>
   </div>
 }

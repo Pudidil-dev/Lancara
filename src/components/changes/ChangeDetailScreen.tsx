@@ -79,13 +79,13 @@ export function ChangeDetailScreen({ id, initialParseError }: { id: string; init
     return () => { stopped = true; clearInterval(timer); window.removeEventListener('focus', poll); document.removeEventListener('visibilitychange', poll) }
   }, [uncertain, approval.key, online])
 
-  const coordinator = session?.capability === 'coordinator' && data?.can_approve === true
-  const owner = !!data && (coordinator || data.change.actor_id === session?.actor_id)
+  const authenticated = !!session
+  const owner = !!data && authenticated
   const active = data?.change.status === 'preview_ready'
   const unresolved = approval.pending || uncertain
   const busy = action.pending || rejection.pending || parser.pending || unresolved
   const patch = data?.patches.find(p => p.id === selected) ?? null
-  const canApprove = !!(coordinator && active && patch && !data?.stale && !contextChanged && !data?.analysis?.blockers.length && !busy && online)
+  const canApprove = !!(authenticated && active && patch && !data?.stale && !contextChanged && !data?.analysis?.blockers.length && !busy && online)
 
   async function analyse(delta?: ManualDelta, reanalyse = false) {
     if (!data || !owner || busy || !online) return
@@ -136,7 +136,7 @@ export function ChangeDetailScreen({ id, initialParseError }: { id: string; init
   }
   async function reject(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!data || !coordinator || busy || !online) return
+    if (!data || !authenticated || busy || !online) return
     setActionError(null)
     try { await rejection.mutate({ path: `/api/changes/${encodeURIComponent(id)}/reject`, body: { reason: reason.trim() } }); setModal(null); setMessage('Kabar ditolak. Rundown aktif tidak berubah.'); await query.refresh() }
     catch (error) { setActionError(asApiError(error)) }
@@ -162,12 +162,11 @@ export function ChangeDetailScreen({ id, initialParseError }: { id: string; init
         {(data.stale || contextChanged) && active && <section className="alert alert-action" role="alert"><h3>↻ {data.stale ? `Rundown sudah berubah ke v${data.event.active_version}. Hitung ulang dari versi terkini.` : 'Kondisi sudah berubah sejak analisis. Hitung ulang dari kondisi terkini.'}</h3>{owner && <button className="btn" disabled={busy || !online} onClick={() => void analyse(undefined, true)}>Hitung ulang</button>}</section>}
         {data.analysis.blockers.length > 0 ? <ConstraintAlert violations={data.analysis.blockers} title={data.analysis.blockers.some(v => v.rule === 'MISSING_DATA') ? 'DATA BELUM LENGKAP' : 'ANALISIS TERHALANG — periksa batas berikut'} timezone={data.event.timezone} /> : data.patches.length === 0 ? <section className="card stack"><h2>! TIDAK ADA OPSI FEASIBLE dalam pencarian ini.</h2><p>{data.analysis.search_meta.note}</p><p className="muted">{data.analysis.search_meta.evaluated} kandidat diperiksa · {data.analysis.search_meta.valid} lolos{data.analysis.search_meta.truncated ? ' · Pencarian dibatasi' : ''}</p><div className="stack">{data.analysis.rejected.map(candidate => <details key={candidate.candidate_id}><summary>{candidate.label} · {candidate.candidate_id}</summary><ConstraintAlert violations={candidate.violations} title="Batas yang menghalangi opsi" timezone={data.event.timezone} /></details>)}</div></section> : <>
           <p className="alert alert-action">✓ Lolos batas yang tercatat. Periksa kondisi lapangan sebelum menyetujui.</p>
-          <div className={styles.patches}>{data.patches.map(option => <PatchCard key={option.id} patch={option} timezone={data.event.timezone} selected={selected === option.id || data.decision?.patch_id === option.id} disabled={busy || !online || data.stale || contextChanged} onSelect={coordinator && active ? () => setSelected(option.id) : undefined} />)}</div>
+          <div className={styles.patches}>{data.patches.map(option => <PatchCard key={option.id} patch={option} timezone={data.event.timezone} selected={selected === option.id || data.decision?.patch_id === option.id} disabled={busy || !online || data.stale || contextChanged} onSelect={authenticated && active ? () => setSelected(option.id) : undefined} />)}</div>
         </>}
-        {active && owner && <div className="row">{coordinator && data.patches.length > 0 && !data.analysis.blockers.length && <button className="btn btn-primary" disabled={!canApprove} onClick={openApproval}>Setujui opsi terpilih</button>}{!data.stale && !contextChanged && <button className="btn" disabled={busy || !online} onClick={() => void analyse(undefined, true)}>Hitung ulang</button>}{data.change.kind !== 'compensation' && <button className="btn" disabled={busy} onClick={() => setEditing(true)}>Perbaiki tafsiran</button>}{coordinator && <button className="btn btn-danger" disabled={busy || !online} onClick={() => { setReason(''); setActionError(null); rejection.reset(); setModal('reject') }}>Tolak kabar</button>}{coordinator && <Link href="/rundown/setup" className="btn">Perbaiki setup rundown</Link>}</div>}
-        {!coordinator && active && <p className="muted">Menunggu koordinator memeriksa dan menyetujui keputusan.</p>}
+        {active && owner && <div className="row">{authenticated && data.patches.length > 0 && !data.analysis.blockers.length && <button className="btn btn-primary" disabled={!canApprove} onClick={openApproval}>Setujui opsi terpilih</button>}{!data.stale && !contextChanged && <button className="btn" disabled={busy || !online} onClick={() => void analyse(undefined, true)}>Hitung ulang</button>}{data.change.kind !== 'compensation' && <button className="btn" disabled={busy} onClick={() => setEditing(true)}>Perbaiki tafsiran</button>}{authenticated && <button className="btn btn-danger" disabled={busy || !online} onClick={() => { setReason(''); setActionError(null); rejection.reset(); setModal('reject') }}>Tolak kabar</button>}{authenticated && <Link href="/rundown/setup" className="btn">Perbaiki setup rundown</Link>}</div>}
       </>}
-      {data.decision && !approved && <section className="alert alert-success"><h2>✓ Disetujui sebagai v{data.decision.new_version}</h2><p>{data.decision.approved_by} · {formatClock(data.decision.approved_at, data.event.timezone, data.server_now)} {zoneAbbrev(data.event.timezone)}</p><p>Alasan: {data.decision.reason}</p>{coordinator && <Link href="/history">Lihat Riwayat</Link>}</section>}
+      {data.decision && !approved && <section className="alert alert-success"><h2>✓ Disetujui sebagai v{data.decision.new_version}</h2><p>{data.decision.approved_by} · {formatClock(data.decision.approved_at, data.event.timezone, data.server_now)} {zoneAbbrev(data.event.timezone)}</p><p>Alasan: {data.decision.reason}</p>{authenticated && <Link href="/history">Lihat Riwayat</Link>}</section>}
       {data.change.status === 'rejected' && <section className="alert alert-blocker"><h2>! Kabar ditolak</h2><p>{data.change.reject_reason}</p></section>}
       <div className="row"><Link href="/changes/new" className="btn">Kirim kabar lain</Link><Link href="/rundown" className="btn">Lihat rundown aktif</Link></div>
     </div>}

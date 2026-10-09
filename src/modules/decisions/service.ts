@@ -112,7 +112,7 @@ export async function requestStatus(session: Session, key: string) {
     `SELECT operation, status, result, created_at, completed_at, actor_id FROM requests
       WHERE event_id = $1 AND idempotency_key = $2 AND (actor_id = $3 OR $4::boolean)
       ORDER BY created_at DESC LIMIT 1`,
-    [session.event_id, key, session.actor_id, session.capability === 'coordinator'],
+    [session.event_id, key, session.actor_id, true],
   )
   if (!rows[0]) return { status: 'not_found' as const, note: 'Belum ditemukan. Jika transaksi gagal, tidak ada keputusan parsial; ulangi dengan key yang sama.' }
   return rows[0]

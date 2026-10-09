@@ -14,13 +14,12 @@ const SOURCE_LABEL: Record<string, string> = { seed: 'Data demo awal', setup: 'P
 
 export default function HistoryPage() {
   const { session } = useSession()
-  // Crew also calls the endpoint: permission and its message come from the server.
   const query = usePolling<HistoryResponse>(session ? `/api/events/${EVENT_ID}/history` : null)
   const data = query.data
   const relatedChanges = Object.fromEntries((data?.decisions ?? []).map(decision => [decision.id, decision.seq]))
   return <AppShell title="Riwayat"><div className="stack">
     {!data && !query.error && <Loading label="Memuat riwayat keputusan…" />}
-    {query.error && <ErrorState error={query.error} onRetry={query.error.status === 403 ? undefined : () => void query.refresh()} />}
+    {query.error && <ErrorState error={query.error} onRetry={() => void query.refresh()} />}
     {data && <>
       <section className="card row between" aria-label="Ringkasan status baca">
         <div><p className="eyebrow">BRIEF BELUM DIBACA</p><strong className="metric">{data.pending_acks}</strong><p className="muted">Jumlah brief yang belum dikonfirmasi oleh penerimanya.</p></div>

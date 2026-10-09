@@ -41,15 +41,15 @@ export default function InboxPage() {
 
   return <AppShell title="Inbox"><div className="stack">
     <div role="status" aria-live="polite">{announcement}</div>
-    {!data && !query.error && <Loading label="Memuat brief untuk peran Anda…" />}
+    {!data && !query.error && <Loading label="Memuat brief acara…" />}
     {query.error && <ErrorState error={query.error} onRetry={() => void query.refresh()} />}
     {data && <>
-      <div className="row between"><h2>{data.role.label} · {unread} belum dibaca</h2><span className="muted">Rundown aktif v{data.active_version}</span></div>
+      <div className="row between"><h2>Brief acara · {unread} belum dibaca</h2><span className="muted">Rundown aktif v{data.active_version}</span></div>
       <div className="pill-filters" role="group" aria-label="Filter brief">
         <button className="btn" aria-pressed={!unreadOnly} onClick={() => setUnreadOnly(false)}>Semua</button>
         <button className="btn" aria-pressed={unreadOnly} onClick={() => setUnreadOnly(true)}>Belum dibaca ({unread})</button>
       </div>
-      {briefs.length === 0 ? <EmptyState title="Belum ada brief untuk peran ini." /> : visible.length === 0 ? <EmptyState title="Semua brief sudah dibaca." action={<button className="btn" onClick={() => setUnreadOnly(false)}>Lihat semua brief</button>} /> : visible.map(brief => <BriefCard key={brief.id} brief={brief} acknowledgedAt={brief.acknowledged_at ?? confirmedAcks[brief.id] ?? null} onAcknowledged={acknowledged} onShowRevision={id => { setUnreadOnly(false); setRevisionTarget(id) }} />)}
+      {briefs.length === 0 ? <EmptyState title="Belum ada brief acara." /> : visible.length === 0 ? <EmptyState title="Semua brief sudah dibaca." action={<button className="btn" onClick={() => setUnreadOnly(false)}>Lihat semua brief</button>} /> : visible.map(brief => <BriefCard key={brief.id} brief={brief} acknowledgedAt={brief.acknowledged_at ?? confirmedAcks[brief.id] ?? null} onAcknowledged={acknowledged} onShowRevision={id => { setUnreadOnly(false); setRevisionTarget(id) }} />)}
     </>}
   </div></AppShell>
 }

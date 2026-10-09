@@ -46,9 +46,7 @@ export async function loadChange(changeId: string, db?: PoolClient, lock = false
 
 function requireOwnerOrCoordinator(session: Session, change: ChangeRow): void {
   requireEvent(session, change.event_id)
-  if (session.capability !== 'coordinator' && session.actor_id !== change.actor_id) {
-    throw new AppError('FORBIDDEN', 'Hanya pembuat kabar atau koordinator yang dapat melakukan ini.')
-  }
+  requireCoordinator(session)
 }
 
 export async function createChange(
@@ -234,7 +232,7 @@ export async function getChangeDetail(session: Session, changeId: string) {
     decision: decision[0] ?? null,
     items: snapshot.items.map((i) => ({ id: i.id, title: i.title, start_at: i.start_at, status: i.status, duration_seconds: i.duration_seconds, estimated_end_at: i.estimated_end_at })),
     server_now: serverNow(event.sim_clock_at),
-    can_approve: session.capability === 'coordinator',
+    can_approve: true,
   }
 }
 
@@ -245,6 +243,6 @@ export async function listChanges(session: Session, eventId: string) {
        FROM changes c JOIN actors a ON a.id = c.actor_id
       WHERE c.event_id = $1 AND ($2::boolean OR c.actor_id = $3)
       ORDER BY c.created_at DESC LIMIT 30`,
-    [eventId, session.capability === 'coordinator', session.actor_id],
+    [eventId, true, session.actor_id],
   )
 }

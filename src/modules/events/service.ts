@@ -4,7 +4,7 @@ import { query, withTransaction, type Db } from '@/lib/db'
 import { env } from '@/lib/env'
 import { AppError } from '@/lib/errors'
 import { idempotent } from '@/lib/idempotency'
-import { requireCoordinator, requireEvent, type Session } from '@/lib/session'
+import { AUTHORIZATION_ROLE_ID, AUTHORIZATION_ROLE_LABEL, requireCoordinator, requireEvent, SINGLE_ACCOUNT_ACTOR_ID, type Session } from '@/lib/session'
 import { sortByStart } from '@/modules/engine/schedule'
 import type { ItemStatus, Snapshot } from '@/modules/engine/types'
 import { validateSnapshot } from '@/modules/engine/validate'
@@ -156,8 +156,9 @@ export async function resetDemo(session: Session) {
 
 export async function listDemoAccounts() {
   return query<{ id: string; display_name: string; role_id: string; role_label: string; capability: string; event_id: string }>(
-    `SELECT a.id, a.display_name, a.role_id, r.label AS role_label, r.capability, a.event_id
-       FROM actors a JOIN roles r ON r.event_id = a.event_id AND r.id = a.role_id
-      ORDER BY (r.capability = 'coordinator') DESC, a.display_name`,
+    `SELECT a.id, a.display_name, $2::text AS role_id, $3::text AS role_label,
+            'coordinator'::text AS capability, a.event_id
+       FROM actors a WHERE a.id = $1`,
+    [SINGLE_ACCOUNT_ACTOR_ID, AUTHORIZATION_ROLE_ID, AUTHORIZATION_ROLE_LABEL],
   )
 }

@@ -18,8 +18,7 @@ import { productionRoleCount } from './rundown-format'
 export function SetupScreen() {
   const { session, loading } = useSession()
   const query = usePolling<RundownResponse>(RUNDOWN_PATH)
-  if (loading) return <Loading label="Memuat sesi…" />
-  if (session && session.capability !== 'coordinator') return <ErrorState error={new ApiError('FORBIDDEN', 'Hanya koordinator yang dapat mengubah setup rundown.', 403, null, null)} />
+  if (loading || !session) return <Loading label="Memuat sesi…" />
   if (!query.data) return query.error ? <ErrorState error={query.error} onRetry={query.refresh} /> : <Loading label="Memuat setup…" />
   return <SetupEditor data={query.data} />
 }
