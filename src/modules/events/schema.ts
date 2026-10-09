@@ -15,6 +15,7 @@ export const ItemSchema = z.object({
   resource_ids: z.array(Id).max(10),
   swappable: z.boolean(),
   segment: z.string().max(80).nullable().optional(),
+  involved: z.array(z.string().min(1).max(200)).max(20).optional(),
   equipment: z.array(z.string().min(1).max(200)).max(20).optional(),
   notes: z.array(z.string().min(1).max(200)).max(20).optional(),
 })

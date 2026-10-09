@@ -2,6 +2,7 @@
 import { addSeconds, localToUtc } from '@/lib/time'
 import { BREAK_PATTERN } from '@/modules/engine/schedule'
 import type { Constraint, Item, RoleRef, Snapshot } from '@/modules/engine/types'
+import { defaultPicRole } from '@/modules/events/default-pic'
 import { MAX_IMPORT_ROWS, type ImportFlag, type ImportRow, type ImportSettings, type RawRow } from './types'
 
 const DEFAULT_DURATION_MIN = 15
@@ -75,7 +76,9 @@ export function normalizeRows(raw: RawRow[], roles: RoleRef[]): { rows: ImportRo
     previousEnd = Math.max(previousEnd, start + duration)
     const mapped = row.pic.map((name) => ({ name, role: matchRole(name, roles) }))
     const unknown = mapped.filter((m) => !m.role).map((m) => m.name)
-    if (!row.pic.length) flags.push({ level: 'warn', code: 'PIC_MISSING', message: 'PIC belum tertulis.' })
+    const matchedIds = [...new Set(mapped.flatMap(m => m.role ? [m.role] : []))].slice(0, 10)
+    const fallback = !matchedIds.length ? defaultPicRole(roles) : undefined
+    if (!row.pic.length) flags.push({ level: 'warn', code: 'PIC_MISSING', message: fallback ? `PIC belum tertulis; diisi default ${fallback.label}. Periksa penanggung jawabnya.` : 'PIC belum tertulis.' })
     if (unknown.length) flags.push({ level: 'warn', code: 'PIC_UNKNOWN', message: `PIC tidak dikenali: ${unknown.join(', ')}.` })
     const title = row.title.replace(/\s+/g, ' ').trim()
     if (title.length > 120) flags.push({ level: 'warn', code: 'TITLE_TRUNCATED', message: 'Judul dipotong 120 karakter.' })
@@ -86,7 +89,8 @@ export function normalizeRows(raw: RawRow[], roles: RoleRef[]): { rows: ImportRo
       title: title.slice(0, 120),
       segment: row.segment?.trim().slice(0, 80) || null,
       pic_names: [...new Set(row.pic.map((p) => p.slice(0, 80)))].slice(0, 10),
-      pic_role_ids: [...new Set(mapped.flatMap((m) => (m.role ? [m.role] : [])))].slice(0, 10),
+      pic_role_ids: matchedIds.length ? matchedIds : fallback ? [fallback.id] : [],
+      involved: (row.involved ?? []).map((p) => p.slice(0, 200)).slice(0, 20),
       equipment: row.equipment.map((e) => e.slice(0, 200)).slice(0, 20),
       notes: row.notes.map((n) => n.slice(0, 200)).slice(0, 20),
       fixed_start: row.fixed_start,
@@ -117,6 +121,7 @@ export function buildSnapshot(rows: ImportRow[], settings: ImportSettings, base:
   const ids = slugIds(rows.map((r) => r.title))
   const starts = absoluteStarts(rows.map((r) => r.start_hhmm))
   const knownRoles = new Set(base.roles.map((r) => r.id))
+  const fallback = defaultPicRole(base.roles)
   const at = (minutes: number) => addSeconds(localToUtc(dateYmd, '00:00', tz), minutes * 60)
   const items: Item[] = rows.map((row, i) => ({
     id: ids[i],
@@ -126,10 +131,13 @@ export function buildSnapshot(rows: ImportRow[], settings: ImportSettings, base:
     min_duration_seconds: row.duration_min * 60,
     estimated_end_at: null,
     status: 'pending',
-    pic_role_ids: row.pic_role_ids.filter((id) => knownRoles.has(id)),
+    pic_role_ids: row.pic_role_ids.some(id => knownRoles.has(id))
+      ? row.pic_role_ids.filter(id => knownRoles.has(id))
+      : fallback ? [fallback.id] : [],
     resource_ids: [],
     swappable: !row.fixed_start && !BREAK_PATTERN.test(row.title),
     segment: row.segment,
+    involved: row.involved,
     equipment: row.equipment,
     notes: row.notes,
   }))

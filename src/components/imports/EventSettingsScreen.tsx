@@ -1,15 +1,17 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { ErrorState, Icon, Loading } from '@/components/ui'
+import { ErrorState, Icon, Loading , Button } from '@/components/ui'
 import { useMutation } from '@/hooks/useMutation'
 import { useOnline } from '@/hooks/useOnline'
 import { usePolling } from '@/hooks/usePolling'
-import { EVENT_ID, RUNDOWN_PATH, type RundownResponse } from '@/hooks/types'
+import type { RundownResponse } from '@/hooks/types'
+import { useEvent } from '@/hooks/useEvent'
 import type { ImportSettings } from '@/modules/imports/types'
 import { applySettings, EventSettingsFields, settingsError, settingsFromSnapshot } from './EventSettingsFields'
 
 /** Halaman "Pengaturan": kartu Pengaturan acara yang sama dengan langkah 1 Tambah Rundown. */
 export function EventSettingsScreen() {
+  const { eventId: EVENT_ID, rundownPath: RUNDOWN_PATH } = useEvent()
   const rundown = usePolling<RundownResponse>(RUNDOWN_PATH, { intervalMs: 30000 })
   const save = useMutation()
   const online = useOnline()
@@ -30,6 +32,6 @@ export function EventSettingsScreen() {
     <EventSettingsFields value={settings} onChange={setSettings} showErrors />
     {save.error && <ErrorState error={save.error} />}
     <p role="status" aria-live="polite" className="dash-notice">{notice}</p>
-    <button type="button" className="btn-gradient btn-block wizard-primary" disabled={save.pending || !online || !!settingsError(settings)} onClick={() => void submit()}>{save.pending ? 'Menyimpan…' : 'Simpan perubahan'}<Icon name="check" /></button>
+    <Button variant="default" type="button" className="btn-gradient btn-block wizard-primary" disabled={save.pending || !online || !!settingsError(settings)} onClick={() => void submit()}>{save.pending ? 'Menyimpan…' : 'Simpan perubahan'}<Icon name="check" /></Button>
   </div>
 }

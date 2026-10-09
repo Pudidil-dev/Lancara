@@ -1,78 +1,103 @@
 'use client'
 import { Icon, Loading } from '@/components/ui'
 import { usePolling } from '@/hooks/usePolling'
-import { formatClock, zoneAbbrev } from '@/lib/time'
+import { formatClock, zoneAbbrev, zoneOffsetMs } from '@/lib/time'
 import { BRAND_WORDMARK } from '@/lib/brand'
 import type { PublicItem, PublicRundown } from '@/modules/share/service'
-import { countdown } from '@/components/rundown/rundown-format'
 
 const hhmm = (iso: string, zone: string) => formatClock(iso, zone).replace('.', ':')
+const range = (item: PublicItem, zone: string) => `${hhmm(item.start_at, zone)}–${hhmm(item.end_at, zone)}`
+const BREAK = /\b(ishoma|istirahat|break|coffee|makan|sholat|salat)\b/i
 
-function status(item: PublicItem): { text: string; tone: 'success' | 'muted' | 'danger' } {
-  if (item.status === 'in_progress') return { text: 'Berlangsung', tone: 'success' }
-  if (item.status === 'completed') return { text: 'Selesai', tone: 'muted' }
-  if (item.status === 'cancelled') return { text: 'Dibatalkan', tone: 'danger' }
-  return item.locked ? { text: 'Terkunci', tone: 'muted' } : { text: 'Terjadwal', tone: 'muted' }
+/** Keterangan publik: tipe segmen saja (tanpa PIC/kru/catatan internal) + status yang memengaruhi pengunjung. */
+function description(item: PublicItem): string {
+  const parts = [item.segment || (BREAK.test(item.title) ? 'Waktu istirahat, ibadah, dan makan.' : '')]
+  if (item.status === 'cancelled') parts.unshift('Dibatalkan')
+  if (item.status === 'completed') parts.unshift('Selesai')
+  return parts.filter(Boolean).join(' · ')
 }
 
-/** Halaman publik hanya baca (tanpa login, tanpa peran) dengan design system Dashboard. */
+function longDate(iso: string, zone: string): string {
+  return new Intl.DateTimeFormat('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: zone }).format(new Date(iso))
+}
+
+function utcLabel(iso: string, zone: string): string {
+  const hours = zoneOffsetMs(Date.parse(iso), zone) / 3_600_000
+  return `UTC${hours >= 0 ? '+' : '−'}${Math.abs(hours)}`
+}
+
+/** Halaman publik hanya baca (Figma Public UI Rundown 201:1203): tanpa login, tanpa peran, tanpa data kru. */
 export function PublicRundownView({ token }: { token: string }) {
   const { data, error } = usePolling<PublicRundown>(`/api/public/rundown/${encodeURIComponent(token)}`, { intervalMs: 15000 })
   if (error && !data) {
-    return <main className="public-page"><PublicHeader /><section className="dash-card public-empty" role="alert">
-      <p className="dash-card-value">Tautan tidak berlaku</p>
-      <p className="dash-card-note">{error.code === 'NOT_FOUND' ? 'Tautan rundown tidak ditemukan atau sudah dinonaktifkan oleh koordinator.' : 'Rundown belum dapat dimuat. Coba muat ulang halaman.'}</p>
-    </section></main>
+    return <main className="public-page"><PublicHeader /><div className="public-body"><section className="public-card public-empty" role="alert">
+      <h1 className="public-card-title">Tautan tidak berlaku</h1>
+      <p>{error.code === 'NOT_FOUND' ? 'Tautan rundown tidak ditemukan atau sudah dinonaktifkan oleh koordinator.' : 'Rundown belum dapat dimuat. Coba muat ulang halaman.'}</p>
+    </section></div></main>
   }
-  if (!data) return <main className="public-page"><PublicHeader /><Loading label="Memuat rundown…" /></main>
+  if (!data) return <main className="public-page"><PublicHeader /><div className="public-body"><Loading label="Memuat rundown…" /></div></main>
   const zone = data.event.timezone
-  const now = Date.parse(data.server_now)
+  const abbrev = zoneAbbrev(zone)
+  const active = data.items.filter((i) => i.status !== 'cancelled')
   const live = data.items.find((i) => i.status === 'in_progress')
   const next = data.items.find((i) => i.status === 'pending')
-  const finish = data.items.filter((i) => i.status !== 'cancelled').reduce((max, i) => Math.max(max, Date.parse(i.end_at)), Number.NEGATIVE_INFINITY)
-  const slack = Math.round((Date.parse(data.event.curfew_at) - finish) / 60000)
+  const first = active[0]
+  const last = active.reduce<PublicItem | undefined>((max, i) => (!max || Date.parse(i.end_at) > Date.parse(max.end_at) ? i : max), undefined)
+  const current = live ?? next
+  const afterCurrent = current ? data.items.slice(data.items.indexOf(current) + 1).find((i) => i.status === 'pending') : undefined
   return <main className="public-page">
-    <PublicHeader updated={hhmm(data.server_now, zone)} zone={zoneAbbrev(zone)} />
-    <div className="page-title-copy"><h1>{data.event.name}</h1><p>Rundown v{data.version} · Semua waktu dalam {zoneAbbrev(zone)} · Diperbarui otomatis</p></div>
-    <div className="dash-summary">
-      <section className="dash-card" data-accent="true" aria-label="Sedang berlangsung">
-        <p className="dash-card-label">Sedang berlangsung</p><p className="dash-card-value">{live?.title ?? 'Belum ada'}</p>
-        <p className="dash-card-note">{next ? (Date.parse(next.start_at) > now ? `${countdown(Date.parse(next.start_at) - now)} menuju ${next.title}` : `Berikutnya ${next.title}`) : 'Tidak ada segmen berikutnya'}</p>
-      </section>
-      <section className="dash-card" data-accent="true" aria-label="Berikutnya">
-        <p className="dash-card-label">Berikutnya</p><p className="dash-card-value">{next?.title ?? '—'}</p>
-        <p className="dash-card-note">{next ? `Mulai ${hhmm(next.start_at, zone)} · ${next.duration_min} menit` : 'Rundown sudah selesai'}</p>
-      </section>
-      <section className="dash-card" aria-label="Estimasi selesai">
-        <p className="dash-card-label">Estimasi selesai</p>
-        <p className="dash-card-value" data-tone={slack < 0 ? 'danger' : 'success'}>{Number.isFinite(finish) ? hhmm(new Date(finish).toISOString(), zone) : '—'}</p>
-        <p className="dash-card-note">{slack >= 0 ? `${slack} menit sebelum batas acara` : `${-slack} menit melewati batas acara`}</p>
-      </section>
-    </div>
-    <ul className="dash-list" aria-label={`Rundown ${data.event.name}`}>
-      <li className="public-grid dash-head" aria-hidden="true"><span>NO</span><span>WAKTU</span><span>SEGMEN</span><span>DURASI</span><span>PIC</span><span>STATUS</span></li>
-      {data.items.map((item, i) => {
-        const s = status(item)
-        return <li key={item.id} className="dash-row" data-live={item.status === 'in_progress' || undefined}>
-          <div className="public-grid dash-row-line">
-            <span className="dash-index">{String(i + 1).padStart(2, '0')}</span>
-            <span className="dash-time">{hhmm(item.start_at, zone)}</span>
-            <span className="dash-seg"><span className="dash-seg-title">{item.title}</span><span className="dash-seg-sub">{item.segment || 'Main stage'} · Segmen {String(i + 1).padStart(2, '0')}</span></span>
-            <span className="dash-dur">{item.duration_min} m</span>
-            <span className="dash-pic">{item.pic.join(' / ') || '—'}</span>
-            <span className="dash-status" data-tone={s.tone}>{s.text}</span>
+    <PublicHeader />
+    <div className="public-body">
+      <div className="public-identity">
+        <div className="public-title-row">
+          <h1>{data.event.name}</h1>
+          <span className="ripple-badge" data-tone="brand">Rundown publik</span>
+        </div>
+        <p>{first && last ? `${longDate(first.start_at, zone)}  ·  ${hhmm(first.start_at, zone)}–${hhmm(last.end_at, zone)} ${abbrev}` : 'Jadwal belum tersedia'}</p>
+      </div>
+      <div className="public-columns">
+        <section className="public-rundown" aria-labelledby="public-rundown-title">
+          <h2 id="public-rundown-title">Rundown acara</h2>
+          <div className="public-card public-agenda">
+            {data.items.length === 0 && <p className="public-agenda-empty">Rundown belum disiapkan.</p>}
+            <ol>
+              {data.items.map((item) => (
+                <li key={item.id} className="public-agenda-row" data-live={item.status === 'in_progress' || undefined} data-status={item.status}>
+                  <span className="public-agenda-time">{range(item, zone)}</span>
+                  <span className="public-agenda-copy">
+                    <span className="public-agenda-title">{item.title}{item.status === 'in_progress' && <span className="sr-only"> (sedang berlangsung)</span>}</span>
+                    {description(item) && <span className="public-agenda-desc">{description(item)}</span>}
+                  </span>
+                  <span className="public-agenda-dur">{item.duration_min} menit</span>
+                </li>
+              ))}
+            </ol>
           </div>
-        </li>
-      })}
-    </ul>
+        </section>
+        <aside className="public-aside" aria-label="Informasi pengunjung">
+          <section className="public-card public-current" aria-label="Segmen saat ini">
+            <span className="ripple-badge" data-tone="brand">{live ? 'SEDANG BERLANGSUNG' : next ? 'SEGMEN BERIKUTNYA' : 'ACARA SELESAI'}</span>
+            <p className="public-current-title">{current?.title ?? 'Semua segmen selesai'}</p>
+            {current && <p className="public-current-time">{range(current, zone)} {abbrev}</p>}
+            <hr />
+            <p className="public-current-label">Berikutnya</p>
+            <p className="public-current-next">{(live ? next : afterCurrent)?.title ?? 'Tidak ada segmen berikutnya'}</p>
+          </section>
+          <section className="public-card public-notes">
+            <h2>Informasi untuk pengunjung</h2>
+            <p>Waktu dapat berubah mengikuti kondisi acara. Periksa kembali halaman ini sebelum sesi dimulai.</p>
+            <h3>Lokasi acara</h3>
+            <p>Akan diumumkan oleh penyelenggara.</p>
+          </section>
+        </aside>
+      </div>
+      <p className="public-footer">Semua waktu dalam {abbrev} ({utcLabel(data.server_now, zone)})</p>
+    </div>
   </main>
 }
 
-function PublicHeader({ updated, zone }: { updated?: string; zone?: string }) {
+function PublicHeader() {
   return <header className="public-header">
-    <span className="public-brand"><span className="agent-logo" aria-hidden="true"><Icon name="lancara-mark" size={20} /></span>{BRAND_WORDMARK}</span>
-    <span className="lc-chip">Rundown publik · hanya baca</span>
-    <span className="topbar-spacer" />
-    {updated && <span className="dash-card-note">Diperbarui {updated} {zone}</span>}
+    <span className="public-brand"><Icon name="lancara-mark" size={22} />{BRAND_WORDMARK}</span>
   </header>
 }

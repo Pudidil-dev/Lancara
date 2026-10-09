@@ -11,6 +11,7 @@ Tugas: keluarkan setiap mata acara yang punya jam mulai, berurutan sesuai dokume
 - end_hhmm: jam selesai bila tertulis, selain itu null. duration_min: durasi dalam menit bila tertulis (15', 00:15, 15 menit), selain itu null.
 - title: nama segmen/mata acara singkat apa adanya (maks 120 karakter). segment: tipe/lokasi/kategori segmen bila ada (mis. "Main stage", "Performance", "Diskusi"), selain itu null.
 - pic: penanggung jawab/peran persis seperti tertulis (mis. "MC", "Stage Manager", "LO Talent"), satu nama per elemen.
+- involved: pihak yang terlibat di segmen itu (pengisi acara, tim, talent) selain PIC; [] bila tidak ada.
 - equipment: daftar perlengkapan/peralatan yang disebut untuk segmen itu. notes: catatan teknis/instruksi operasional, satu butir per kalimat.
 - fixed_start: true hanya bila dokumen menyebut jam tetap/tidak boleh digeser/mulai tetap.
 Jangan mengarang data yang tidak tertulis; gunakan null atau [] bila kosong. Abaikan judul dokumen, header kolom, nomor halaman, dan tanda tangan.`
@@ -29,7 +30,7 @@ export const IMPORT_JSON_SCHEMA = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['start_hhmm', 'end_hhmm', 'duration_min', 'title', 'segment', 'pic', 'equipment', 'notes', 'fixed_start'],
+        required: ['start_hhmm', 'end_hhmm', 'duration_min', 'title', 'segment', 'pic', 'involved', 'equipment', 'notes', 'fixed_start'],
         properties: {
           start_hhmm: { type: 'string' },
           end_hhmm: Nullable('string'),
@@ -37,6 +38,7 @@ export const IMPORT_JSON_SCHEMA = {
           title: { type: 'string' },
           segment: Nullable('string'),
           pic: StringList,
+          involved: StringList,
           equipment: StringList,
           notes: StringList,
           fixed_start: { type: 'boolean' },
@@ -60,6 +62,7 @@ const AiRowSchema = z.object({
   title: Text(120).pipe(z.string().min(1)),
   segment: Text(80).nullable().transform((v) => v || null),
   pic: z.array(Text(80)).max(10).transform((v) => v.filter(Boolean)),
+  involved: z.array(Text(200)).max(20).transform((v) => v.filter(Boolean)).default([]),
   equipment: z.array(Text(200)).max(20).transform((v) => v.filter(Boolean)),
   notes: z.array(Text(200)).max(20).transform((v) => v.filter(Boolean)),
   fixed_start: z.boolean(),

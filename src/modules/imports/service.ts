@@ -1,4 +1,6 @@
 // Alur impor PDF: unggah → ekstraksi (AI, cadangan aturan) → draft tersimpan → edit opsional → aktivasi sebagai versi baru.
+// Isian manual memakai draft dan aktivasi yang sama.
+import { createHash } from 'node:crypto'
 import { serverNow } from '@/lib/clock'
 import { query } from '@/lib/db'
 import { env } from '@/lib/env'
@@ -9,6 +11,7 @@ import { localDate } from '@/lib/time'
 import { validateSnapshot } from '@/modules/engine/validate'
 import { getEvent, getSnapshot, saveSetup } from '@/modules/events/service'
 import { aiExtractRows, ImportAiUnavailableError } from './ai-extract'
+import { manualToRaw } from './manual'
 import { buildSnapshot, normalizeRows } from './normalize'
 import { readPdf } from './pdf'
 import { ruleExtractRows } from './rule-extract'
@@ -22,8 +25,11 @@ import {
   type ImportRecord,
   type ImportRow,
   type ImportSettings,
+  type ManualImportInput,
   type RawRow,
 } from './types'
+
+const MANUAL_FILENAME = 'Isian manual'
 
 function parseSettings(raw: unknown): ImportSettings {
   const parsed = ImportSettingsSchema.safeParse(raw)
@@ -91,6 +97,30 @@ export async function createImport(session: Session, eventId: string, input: { f
   return { id: inserted[0].id, status: 'draft', settings, draft, applied_version: null, created_at: new Date(inserted[0].created_at).toISOString() }
 }
 
+/** Isian manual (Figma "Siapkan Data"): baris dinormalisasi seperti hasil baca PDF agar langkah tinjau sama. */
+export async function createManualImport(session: Session, eventId: string, input: ManualImportInput): Promise<ImportRecord> {
+  requireEvent(session, eventId)
+  requireCoordinator(session)
+  await rateLimit(session)
+  const event = await getEvent(eventId)
+  const snapshot = await getSnapshot(eventId, event.active_version)
+  const { rows, warnings } = normalizeRows(input.rows.map(manualToRaw), snapshot.roles)
+  const json = JSON.stringify(input.rows)
+  const draft: ImportDraft = {
+    source: { filename: MANUAL_FILENAME, sha256: createHash('sha256').update(json).digest('hex'), size_bytes: Buffer.byteLength(json), page_count: 1, pages_read: [] },
+    parser: 'manual',
+    rows,
+    warnings,
+  }
+  const inserted = await query<{ id: string; created_at: Date }>(
+    `INSERT INTO rundown_imports (event_id, actor_id, filename, kind, sha256, size_bytes, page_count, pages_read, row_count, parser, settings, draft)
+     VALUES ($1, $2, $3, 'manual', $4, $5, 1, NULL, $6, 'manual', $7, $8) RETURNING id, created_at`,
+    [eventId, session.actor_id, MANUAL_FILENAME, draft.source.sha256, draft.source.size_bytes, rows.length, JSON.stringify(input.settings), JSON.stringify(draft)],
+  )
+  log('info', 'import_created', { import_id: inserted[0].id, parser: 'manual', rows: rows.length })
+  return { id: inserted[0].id, status: 'draft', settings: input.settings, draft, applied_version: null, created_at: new Date(inserted[0].created_at).toISOString() }
+}
+
 async function loadImport(eventId: string, importId: string): Promise<ImportRecord> {
   if (!/^[0-9a-f-]{36}$/i.test(importId)) throw notFound('Impor')
   const rows = await query<Parameters<typeof toRecord>[0]>('SELECT id, status, settings, draft, applied_version, created_at FROM rundown_imports WHERE id = $1 AND event_id = $2', [importId, eventId])
@@ -144,7 +174,7 @@ export async function applyImport(session: Session, eventId: string, importId: s
   const snapshot = buildSnapshot(record.draft.rows, record.settings, base, localDate(anchor, base.event.timezone))
   const { errors } = validateSnapshot(snapshot)
   if (errors.length) throw new AppError('VALIDATION_ERROR', 'Rundown belum bisa diaktifkan: perbaiki data berikut.', errors)
-  const result = await saveSetup(session, eventId, { base_version: input.base_version, snapshot, idempotency_key: input.idempotency_key, origin: 'import', import_filename: record.draft.source.filename, note: `Impor PDF ${record.draft.source.filename}`.slice(0, 200) })
+  const result = await saveSetup(session, eventId, { base_version: input.base_version, snapshot, idempotency_key: input.idempotency_key, origin: 'import', import_filename: record.draft.source.filename, note: (record.draft.parser === 'manual' ? 'Isian manual (Tambah Rundown)' : `Impor PDF ${record.draft.source.filename}`).slice(0, 200) })
   await query(`UPDATE rundown_imports SET status = 'applied', applied_version = $3, updated_at = now() WHERE id = $1 AND event_id = $2 AND status = 'draft'`, [importId, eventId, result.new_version])
   log('info', 'import_applied', { import_id: importId, version: result.new_version, items: snapshot.items.length })
   return { new_version: result.new_version, import_id: importId, replayed: result.replayed }

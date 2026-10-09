@@ -12,6 +12,7 @@ import { normalizeIso } from '@/lib/time'
 import { enqueueVersionNotification } from '@/modules/notifier/outbox'
 import type { NotificationOrigin } from '@/modules/notifier/types'
 import { seedDemo } from './seed'
+import { fillDefaultPic } from './default-pic'
 
 export interface EventRow {
   id: string
@@ -35,6 +36,7 @@ export async function getSnapshot(eventId: string, version: number, db?: Db): Pr
 
 /** Normalisasi timestamp & urutan supaya snapshot tersimpan kanonis (hash kandidat stabil). */
 export function normalizeSnapshot(s: Snapshot): Snapshot {
+  s = fillDefaultPic(s)
   return {
     ...s,
     event: { ...s.event, curfew_at: normalizeIso(s.event.curfew_at) },

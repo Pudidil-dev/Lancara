@@ -21,7 +21,7 @@ export const FLAG_CODES = ['PIC_UNKNOWN', 'PIC_MISSING', 'DURATION_GUESSED', 'OV
 export type FlagCode = (typeof FLAG_CODES)[number]
 export interface ImportFlag { level: 'error' | 'warn'; code: FlagCode; message: string }
 
-/** Satu baris rundown hasil ekstraksi (kolom review Figma: Waktu, Segmen, Durasi, PIC, Perlengkapan, Teknis). */
+/** Satu baris rundown hasil ekstraksi atau isian manual (kolom Figma: Waktu, Segmen, Durasi, PIC, Pihak yang terlibat, Perlengkapan, Teknis). */
 export const ImportRowSchema = z.object({
   row_no: z.number().int().min(1),
   start_hhmm: Hhmm,
@@ -30,6 +30,7 @@ export const ImportRowSchema = z.object({
   segment: z.string().trim().max(80).nullable(),
   pic_names: z.array(z.string().trim().min(1).max(80)).max(10),
   pic_role_ids: z.array(z.string().min(1).max(64)).max(10),
+  involved: z.array(Line).max(20).default([]),
   equipment: z.array(Line).max(20),
   notes: z.array(Line).max(20),
   fixed_start: z.boolean(),
@@ -39,7 +40,7 @@ export type ImportRow = z.infer<typeof ImportRowSchema>
 
 export interface ImportDraft {
   source: { filename: string; sha256: string; size_bytes: number; page_count: number; pages_read: number[] }
-  parser: 'rule' | 'ai'
+  parser: 'rule' | 'ai' | 'manual'
   rows: ImportRow[]
   warnings: string[]
 }
@@ -52,6 +53,7 @@ export interface RawRow {
   title: string
   segment: string | null
   pic: string[]
+  involved?: string[]
   equipment: string[]
   notes: string[]
   fixed_start: boolean
@@ -65,3 +67,24 @@ export interface ImportRecord {
   applied_version: number | null
   created_at: string
 }
+
+/** Satu poin dari overlay "Tambahkan poin rundown" (Figma 179:2324). Teks daftar dipisah koma/baris di server. */
+export const ManualRowSchema = z
+  .object({
+    start_hhmm: Hhmm,
+    end_hhmm: Hhmm.nullable(),
+    duration_min: z.number().int().min(1).max(24 * 60).nullable(),
+    title: z.string().trim().min(1, 'Segmen wajib diisi.').max(120),
+    pic: z.string().trim().max(400),
+    involved: z.string().trim().max(1000),
+    equipment: z.string().trim().max(2000),
+    notes: z.string().trim().max(2000),
+  })
+  .refine((row) => row.duration_min !== null || row.end_hhmm !== null, { message: 'Isi durasi atau jam selesai.', path: ['duration_min'] })
+export type ManualRow = z.infer<typeof ManualRowSchema>
+
+export const ManualImportInputSchema = z.object({
+  settings: ImportSettingsSchema,
+  rows: z.array(ManualRowSchema).min(1, 'Tambahkan minimal satu poin rundown.').max(MAX_IMPORT_ROWS),
+})
+export type ManualImportInput = z.infer<typeof ManualImportInputSchema>

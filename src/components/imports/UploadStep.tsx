@@ -1,49 +1,45 @@
 'use client'
 import { useRef, useState, type DragEvent } from 'react'
-import { Icon } from '@/components/ui'
-import { ApiError } from '@/lib/api-client'
-import { EVENT_ID } from '@/hooks/types'
+import { Icon , Button, Input, Label } from '@/components/ui'
+import { api } from '@/lib/api-client'
+import { userErrorMessage } from '@/lib/error-feedback'
+import { notifyError } from '@/lib/notifications'
+import { useEvent } from '@/hooks/useEvent'
 import type { ImportRecord, ImportSettings } from '@/modules/imports/types'
 
 const MAX_BYTES = 4 * 1024 * 1024
 
 /** Unggah multipart (field file, pages, settings). Sukses hanya setelah server menyimpan draft. */
-async function uploadPdf(file: File, pages: string, settings: ImportSettings): Promise<ImportRecord> {
+async function uploadPdf(eventId: string, file: File, pages: string, settings: ImportSettings): Promise<ImportRecord> {
   const form = new FormData()
   form.append('file', file)
   form.append('pages', pages)
   form.append('settings', JSON.stringify(settings))
-  let res: Response
-  try {
-    res = await fetch(`/api/events/${EVENT_ID}/imports`, { method: 'POST', body: form, credentials: 'same-origin', cache: 'no-store' })
-  } catch {
-    throw new ApiError('NETWORK', 'Tidak ada koneksi. Unggahan memerlukan server.', 0, null, null)
-  }
-  const json = await res.json().catch(() => null)
-  if (!res.ok) throw new ApiError(json?.code ?? 'INTERNAL', json?.message ?? `HTTP ${res.status}`, res.status, json?.request_id ?? null, json?.details ?? null)
-  return json.data as ImportRecord
+  return api<ImportRecord>(`/api/events/${eventId}/imports`, { method: 'POST', body: form, timeoutMs: 120_000, operation: 'upload' })
 }
 
 type State = { kind: 'idle' } | { kind: 'loading'; name: string } | { kind: 'success'; record: ImportRecord } | { kind: 'error'; message: string }
 
 /** Langkah 2 "Unggah rundown dalam PDF" (Figma 60:2291) termasuk state loading/sukses (135:7964, 135:8053). */
 export function UploadStep({ settings, record, onUploaded }: { settings: ImportSettings; record: ImportRecord | null; onUploaded: (record: ImportRecord) => void }) {
+  const { eventId } = useEvent()
   const [pages, setPages] = useState('')
   const [drag, setDrag] = useState(false)
   const [state, setState] = useState<State>(record ? { kind: 'success', record } : { kind: 'idle' })
   const input = useRef<HTMLInputElement>(null)
 
   async function handle(file: File | undefined) {
-    if (!file || state.kind === 'loading') return
+    if (!eventId || !file || state.kind === 'loading') return
     if (!/\.pdf$/i.test(file.name) && file.type !== 'application/pdf') return setState({ kind: 'error', message: 'Format berkas harus PDF (.pdf).' })
     if (file.size > MAX_BYTES) return setState({ kind: 'error', message: 'Ukuran berkas melebihi 4 MB.' })
     setState({ kind: 'loading', name: file.name })
     try {
-      const created = await uploadPdf(file, pages, settings)
+      const created = await uploadPdf(eventId, file, pages, settings)
       setState({ kind: 'success', record: created })
       onUploaded(created)
     } catch (error) {
-      setState({ kind: 'error', message: error instanceof ApiError ? error.message : 'Unggahan gagal. Coba lagi.' })
+      setState({ kind: 'error', message: userErrorMessage(error, 'upload') })
+      notifyError(error, { id: 'upload-rundown', context: 'upload' })
     } finally {
       if (input.current) input.current.value = ''
     }
@@ -69,25 +65,25 @@ export function UploadStep({ settings, record, onUploaded }: { settings: ImportS
             : done
               ? <><div className="dropzone-icon"><Icon name="success-check" size={54} /></div><h3 role="status">Berkas kamu berhasil di upload...</h3>
                   <p>{done.draft.source.filename} · {done.draft.rows.length} segmen terbaca {done.draft.parser === 'ai' ? 'oleh AI Lancara' : 'dari pola tabel'}</p>
-                  <button type="button" className="dropzone-btn" onClick={() => input.current?.click()}><Icon name="folder-open" />Ganti file</button></>
+                  <Button variant="outline" type="button" className="dropzone-btn" onClick={() => input.current?.click()}><Icon name="folder-open" />Ganti file</Button></>
               : <><div className="dropzone-icon"><Icon name="file-pdf" size={30} /></div>
                   <h3>Tarik file PDF ke sini atau pilih file</h3>
                   <p>Format: PDF standar (.pdf). Kapasitas maksimal hingga 4 MB dan maksimal 40 halaman rundown per acara.</p>
-                  <button type="button" className="dropzone-btn" onClick={() => input.current?.click()}><Icon name="folder-open" />Pilih file dari perangkat</button></>}
-          <input ref={input} type="file" accept="application/pdf,.pdf" hidden onChange={(e) => void handle(e.target.files?.[0])} />
+                  <Button variant="outline" type="button" className="dropzone-btn" onClick={() => input.current?.click()}><Icon name="folder-open" />Pilih file dari perangkat</Button></>}
+          <Input ref={input} type="file" accept="application/pdf,.pdf" hidden onChange={(e) => void handle(e.target.files?.[0])} />
         </div>
         {state.kind === 'error' && <p className="lc-alert" role="alert">{state.message}</p>}
         <div className="extract-config">
           <div className="extract-config-head">
             <div>
-              <label htmlFor="pdf-pages">Halaman yang dibaca <span>(Opsional)</span></label>
+              <Label htmlFor="pdf-pages">Halaman yang dibaca <span>(Opsional)</span></Label>
               <p className="lc-small">Gunakan jika dokumen mencakup lampiran, cover tebal, atau banyak sesi panggung sekaligus.</p>
             </div>
             <span className="lc-help" title="Contoh: 2-5 untuk membaca halaman 2 sampai 5, atau 1,3 untuk halaman 1 dan 3. Kosong = semua halaman (maks 40)."><Icon name="help-circle" /></span>
           </div>
           <div className="extract-config-row">
-            <input id="pdf-pages" value={pages} maxLength={60} disabled={state.kind === 'loading'} onChange={(e) => setPages(e.target.value)} placeholder="Semua halaman (misal: 1-4, atau tinggalkan kosong)" />
-            <button type="button" className="btn-gradient" disabled={state.kind === 'loading'} onClick={() => setPages('')}>Reset ke default</button>
+            <Input id="pdf-pages" value={pages} maxLength={60} disabled={state.kind === 'loading'} onChange={(e) => setPages(e.target.value)} placeholder="Semua halaman (misal: 1-4, atau tinggalkan kosong)" />
+            <Button variant="default" type="button" className="btn-gradient" disabled={state.kind === 'loading'} onClick={() => setPages('')}>Reset ke default</Button>
           </div>
           <p className="lc-info lc-small"><Icon name="info" size={14} />Sistem akan mengidentifikasi baris tabel waktu (WIB), nama segmen, penanggung jawab (PIC), dan catatan multimedia secara granular.{done && pages && ' Pilih ulang file untuk membaca halaman baru.'}</p>
         </div>

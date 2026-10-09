@@ -6,25 +6,28 @@ import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, v
 import { CSS } from '@dnd-kit/utilities'
 import { PageActions, PageDescription } from '@/components/shell/PageHeader'
 import { AgentChat } from '@/components/agent/AgentChat'
-import { ConstraintAlert, Dialog, EmptyState, ErrorState, Icon, Loading } from '@/components/ui'
+import { ConstraintAlert, Dialog, EmptyState, ErrorState, Icon, Loading , Button } from '@/components/ui'
 import type { HistoryResponse } from '@/components/briefs/types'
 import { useSession } from '@/hooks/useSession'
 import { usePolling } from '@/hooks/usePolling'
 import { useMutation } from '@/hooks/useMutation'
 import { useOnline } from '@/hooks/useOnline'
-import { EVENT_ID, RUNDOWN_PATH, type ChangeSummary, type RundownResponse } from '@/hooks/types'
+import { type ChangeSummary, type RundownResponse } from '@/hooks/types'
+import { useEvent } from '@/hooks/useEvent'
 import { formatDuration, toIso, toMs, zoneAbbrev } from '@/lib/time'
 import { evaluate, isBreakItem } from '@/modules/engine/schedule'
 import type { Item, Snapshot, Violation } from '@/modules/engine/types'
 import { ChangeHistoryCard, SummaryCards, hhmm } from './RundownSide'
 import { ShareButton } from './ShareButton'
+import { DefaultPicButton } from './DefaultPicButton'
 import { itemEnd, picLabel, roleNames } from './rundown-format'
+import { RundownCellsView, RundownTable, listText, minutesText } from './RundownTable'
 
 const isFixed = (item: Item, snapshot: Snapshot) => snapshot.constraints.some((c) => c.item_id === item.id && c.type === 'fixed_start')
 /** Bisa diseret: belum mulai, bukan ishoma/istirahat, bukan slot tetap. */
 const isMovable = (item: Item, snapshot: Snapshot) => item.status === 'pending' && !isBreakItem(item) && !isFixed(item, snapshot)
 
-/** Status kolom STATUS Figma: Berlangsung / Terkunci / Terjadwal (+ Selesai, Dibatalkan). */
+/** Status segmen (detail baris): Berlangsung / Terkunci / Terjadwal (+ Selesai, Dibatalkan). */
 function statusOf(item: Item, snapshot: Snapshot): { text: string; tone: 'success' | 'warning' | 'danger' | 'muted' } {
   if (item.status === 'in_progress') return { text: 'Berlangsung', tone: 'success' }
   if (item.status === 'completed') return { text: 'Selesai', tone: 'muted' }
@@ -32,11 +35,6 @@ function statusOf(item: Item, snapshot: Snapshot): { text: string; tone: 'succes
   if (isFixed(item, snapshot)) return { text: 'Terkunci', tone: 'success' }
   if (isBreakItem(item)) return { text: 'Terkunci', tone: 'muted' }
   return { text: 'Terjadwal', tone: 'muted' }
-}
-
-function subtitle(item: Item, snapshot: Snapshot, index: number): string {
-  const kind = isFixed(item, snapshot) ? 'Mulai tetap' : item.segment || (isBreakItem(item) ? 'Istirahat' : 'Main stage')
-  return `${kind} · Segmen ${String(index + 1).padStart(2, '0')}`
 }
 
 /**
@@ -68,7 +66,9 @@ function ItemDetail({ item, snapshot, action }: { item: Item; snapshot: Snapshot
   return <div className="dash-detail"><dl>
     <dt>Jadwal · {zoneAbbrev(zone)}</dt><dd>{hhmm(item.start_at, zone)} – {hhmm(new Date(itemEnd(item)).toISOString(), zone)}{item.estimated_end_at && ' (estimasi selesai)'}</dd>
     <dt>Durasi / minimum</dt><dd>{formatDuration(item.duration_seconds)} / {formatDuration(item.min_duration_seconds)}</dd>
+    <dt>Status</dt><dd>{statusOf(item, snapshot).text}{item.segment ? ` · ${item.segment}` : ''}</dd>
     <dt>PIC</dt><dd>{roleNames(item.pic_role_ids, snapshot).join(', ') || 'Belum diisi'}</dd>
+    <dt>Pihak yang terlibat</dt><dd>{list(item.involved)}</dd>
     <dt>Perlengkapan</dt><dd>{list(item.equipment)}</dd>
     <dt>Teknis</dt><dd>{list(item.notes)}</dd>
     <dt>Batas tercatat</dt><dd>{snapshot.constraints.filter((c) => c.item_id === item.id).map((c) => <p key={c.id}>{c.type === 'fixed_start' ? 'Mulai tetap' : 'Mulai paling awal'} {hhmm(c.at, zone)}{c.note ? ` · ${c.note}` : ''}</p>)}<p>Selesai acara {hhmm(snapshot.event.curfew_at, zone)}</p></dd>
@@ -79,36 +79,42 @@ function ItemDetail({ item, snapshot, action }: { item: Item; snapshot: Snapshot
 
 interface RowProps { item: Item; snapshot: Snapshot; index: number; open: boolean; movable: boolean; onToggle: () => void; detail: React.ReactNode }
 
+/** Baris "Rundown table" Figma (179:2168). Nomor = pegangan seret (segmen pending yang bisa dipindah). */
 function SortableRow({ item, snapshot, index, open, movable, onToggle, detail }: RowProps) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: item.id, disabled: !movable })
   const zone = snapshot.event.timezone
-  const status = statusOf(item, snapshot)
-  return <li ref={setNodeRef} className="dash-row" data-live={item.status === 'in_progress' || undefined} data-dragging={isDragging || undefined} style={{ transform: CSS.Transform.toString(transform), transition }}>
-    <div className="dash-grid dash-row-line">
-      <button type="button" ref={setActivatorNodeRef} className="dash-grip" disabled={!movable} aria-label={movable ? `Seret untuk memindah ${item.title}` : `${item.title} tidak bisa dipindah`} {...attributes} {...listeners}><Icon name="grip-horizontal" /></button>
-      <button type="button" className="dash-cell-btn" aria-expanded={open} aria-controls={`detail-${item.id}`} onClick={onToggle}>
-        <span className="dash-index">{String(index + 1).padStart(2, '0')}</span>
-        <span className="dash-time">{hhmm(item.start_at, zone)}</span>
-        <span className="dash-seg"><span className="dash-seg-title">{item.title}</span><span className="dash-seg-sub">{subtitle(item, snapshot, index)}</span></span>
-        <span className="dash-dur">{Math.round(item.duration_seconds / 60)} m</span>
-        <span className="dash-pic">{picLabel(item, snapshot)}</span>
-        <span className="dash-status" data-tone={status.tone}>{status.text}</span>
-      </button>
+  return <li ref={setNodeRef} className="rt-row" data-live={item.status === 'in_progress' || undefined} data-dragging={isDragging || undefined} style={{ transform: CSS.Transform.toString(transform), transition }}>
+    <div className="rt-grid">
+      <Button variant="ghost" type="button" ref={setActivatorNodeRef} className="rt-no" disabled={!movable} title={movable ? 'Seret untuk memindah' : undefined} aria-label={movable ? `Seret untuk memindah ${item.title}` : `${item.title} tidak bisa dipindah`} {...attributes} {...listeners}>{index + 1}.</Button>
+      <Button variant="ghost" type="button" className="rt-cells" aria-expanded={open} aria-controls={`detail-${item.id}`} onClick={onToggle}>
+        <RundownCellsView cells={{
+          waktu: `${hhmm(item.start_at, zone)}–${hhmm(new Date(itemEnd(item)).toISOString(), zone)}`,
+          segmen: item.title,
+          durasi: minutesText(Math.round(item.duration_seconds / 60)),
+          pic: picLabel(item, snapshot),
+          involved: listText(item.involved),
+          equipment: listText(item.equipment),
+          notes: listText(item.notes, ' '),
+        }} />
+      </Button>
     </div>
     {open && <div id={`detail-${item.id}`}>{detail}</div>}
   </li>
 }
 
 export function RundownScreen() {
+  const { eventId: EVENT_ID, rundownPath: RUNDOWN_PATH } = useEvent()
   const { session } = useSession()
   const { data, error, refresh } = usePolling<RundownResponse>(RUNDOWN_PATH)
-  const changes = usePolling<ChangeSummary[]>(`/api/events/${EVENT_ID}/changes`)
+  const changes = usePolling<ChangeSummary[]>(EVENT_ID ? `/api/events/${EVENT_ID}/changes` : null)
   const history = usePolling<HistoryResponse>(session ? `/api/events/${EVENT_ID}/history` : null, { intervalMs: 10000 })
   const mutation = useMutation()
+  const deletion = useMutation()
   const online = useOnline()
   const search = useSearchParams().get('q')?.trim().toLowerCase() ?? ''
   const [openId, setOpenId] = useState<string | null>(null)
   const [notice, setNotice] = useState('')
+  const [deleteIntent, setDeleteIntent] = useState<{ snapshot: Snapshot; version: number; count: number } | null>(null)
   const [proposal, setProposal] = useState<{ snapshot: Snapshot; violations: Violation[]; moved: Item[] } | null>(null)
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }))
   const items = useMemo(() => (data ? [...data.snapshot.items].sort((a, b) => toMs(a.start_at) - toMs(b.start_at) || a.id.localeCompare(b.id)) : []), [data])
@@ -116,7 +122,7 @@ export function RundownScreen() {
   const { snapshot, version, server_now: now } = data
   const zone = snapshot.event.timezone
   const visible = search ? items.filter((i) => `${i.title} ${i.segment ?? ''} ${picLabel(i, snapshot)}`.toLowerCase().includes(search)) : items
-  const disabled = mutation.pending || !online
+  const disabled = mutation.pending || deletion.pending || !!deleteIntent || !online
   const canDrag = !!session && !search && !disabled
 
   async function changeStatus(item: Item) {
@@ -152,41 +158,68 @@ export function RundownScreen() {
     } catch { /* Error ditampilkan di dialog. */ }
   }
 
+  async function deleteAll() {
+    if (!deleteIntent || !online) return
+    try {
+      const result = await deletion.mutate<{ new_version: number }>({
+        path: `/api/events/${EVENT_ID}/setup`, method: 'PUT',
+        body: { base_version: deleteIntent.version, snapshot: deleteIntent.snapshot, origin: 'manual_edit', note: 'Semua segmen rundown dihapus dari dashboard' },
+      })
+      setDeleteIntent(null)
+      setOpenId(null)
+      setNotice(`Semua segmen rundown dihapus · Rundown v${result.new_version}.`)
+    } catch { /* Intent dibekukan agar retry memakai payload dan key yang sama. */ }
+  }
+
   const action = (item: Item) => session && (item.status === 'pending' || item.status === 'in_progress')
-    ? <button type="button" className="btn btn-compact" disabled={disabled} onClick={() => void changeStatus(item)}>{item.status === 'pending' ? 'Tandai mulai' : 'Tandai selesai'}</button> : undefined
+    ? <Button variant="outline" type="button" className="btn btn-compact" disabled={disabled} onClick={() => void changeStatus(item)}>{item.status === 'pending' ? 'Tandai mulai' : 'Tandai selesai'}</Button> : undefined
   const latestDecision = history.data?.decisions[0]
   return <div className="stack">
     <PageDescription>Detail rundown · Rundown v{version} · Klik segmen untuk membuka informasi operasional.</PageDescription>
     {session && <PageActions><ShareButton /></PageActions>}
     {data.validation.errors.length + data.validation.missing.length > 0 && <ConstraintAlert title="DATA BELUM LENGKAP — periksa rundown" violations={[...data.validation.errors, ...data.validation.missing]} />}
+    {session && EVENT_ID && <DefaultPicButton snapshot={snapshot} version={version} eventId={EVENT_ID} />}
     {error && <ErrorState error={error} onRetry={refresh} />}{mutation.error && !proposal && <ErrorState error={mutation.error} />}
+    {items.length === 0 && notice && <p role="status" className="alert alert-success"><Icon name="check" /> {notice}</p>}
     {items.length === 0 ? <EmptyState title="Rundown belum disiapkan." /> : <>
       <SummaryCards snapshot={snapshot} now={now} changes={changes.data} />
       <div className="dash-main">
         <div className="dash-left">
           <p role="status" aria-live="polite" className="dash-notice">{mutation.pending ? 'Menyimpan perubahan…' : notice}{search && ` Menampilkan ${visible.length} segmen untuk "${search}".`}</p>
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-            <ul className="dash-list" aria-label={`Rundown v${version} · ${zoneAbbrev(zone)}`}>
-              <li className="dash-grid dash-head" aria-hidden="true"><span /><span>NO</span><span>WAKTU</span><span>SEGMEN</span><span>DURASI</span><span>PIC</span><span>STATUS</span></li>
+            <RundownTable title={snapshot.event.name} count={visible.length} label={`Rundown v${version} · ${zoneAbbrev(zone)}`} scroll>
               <SortableContext items={visible.map((i) => i.id)} strategy={verticalListSortingStrategy}>
                 {visible.map((item) => <SortableRow key={item.id} item={item} snapshot={snapshot} index={items.indexOf(item)} open={openId === item.id} movable={canDrag && isMovable(item, snapshot)}
                   onToggle={() => setOpenId(openId === item.id ? null : item.id)} detail={<ItemDetail item={item} snapshot={snapshot} action={action(item)} />} />)}
               </SortableContext>
-            </ul>
+            </RundownTable>
           </DndContext>
+          {session && <div className="row"><Button variant="destructive" type="button" className="btn btn-danger" disabled={disabled || !!proposal} onClick={() => {
+            deletion.reset()
+            setNotice('')
+            setDeleteIntent({ version, count: items.length, snapshot: { ...snapshot, items: [], dependencies: [], constraints: [] } })
+          }}><Icon name="alert" /> Hapus semua rundown</Button></div>}
           <ChangeHistoryCard decision={latestDecision} zone={zone} />
         </div>
         <AgentChat />
       </div>
     </>}
+    <Dialog open={!!deleteIntent} title="Hapus semua rundown?" busy={deletion.pending} onClose={() => { setDeleteIntent(null); deletion.reset() }}>
+      <p>Seluruh {deleteIntent?.count ?? 0} segmen pada rundown aktif akan dihapus, termasuk batas dan dependensi segmen. Informasi acara dan riwayat versi tetap tersimpan.</p>
+      {deletion.error && <ErrorState error={deletion.error} />}
+      <div className="row">
+        <Button variant="outline" type="button" className="btn" disabled={deletion.pending} onClick={() => { setDeleteIntent(null); deletion.reset() }}>Batal</Button>
+        <Button variant="destructive" type="button" className="btn btn-danger" disabled={deletion.pending || !online} onClick={() => void deleteAll()}><Icon name="alert" /> {deletion.pending ? 'Menghapus…' : deletion.error ? 'Coba hapus lagi' : 'Ya, hapus semua rundown'}</Button>
+      </div>
+    </Dialog>
     <Dialog open={!!proposal} title="Simpan urutan baru?" onClose={() => { setProposal(null); mutation.reset() }} busy={mutation.pending}>
       {proposal && <>
         <p>Jam segmen dihitung ulang mengikuti urutan baru. Ishoma dan slot mulai tetap tidak bergeser.</p>
         <ul>{proposal.moved.map((i) => <li key={i.id}>{i.title}: {hhmm(snapshot.items.find((x) => x.id === i.id)!.start_at, zone)} → {hhmm(i.start_at, zone)}</li>)}</ul>
         {proposal.violations.length > 0 && <ConstraintAlert title="Urutan ini melanggar batas acara" violations={proposal.violations} />}
         {mutation.error && <ErrorState error={mutation.error} />}
-        <div className="row"><button type="button" className="btn" disabled={mutation.pending} onClick={() => { setProposal(null); mutation.reset() }}>Batal</button>
-          <button type="button" className="btn-gradient" disabled={disabled || proposal.violations.length > 0} onClick={() => void saveOrder()}>{mutation.pending ? 'Menyimpan…' : `Simpan sebagai v${version + 1}`}</button></div>
+        <div className="row"><Button variant="outline" type="button" className="btn" disabled={mutation.pending} onClick={() => { setProposal(null); mutation.reset() }}>Batal</Button>
+          <Button variant="default" type="button" className="btn-gradient" disabled={disabled || proposal.violations.length > 0} onClick={() => void saveOrder()}>{mutation.pending ? 'Menyimpan…' : `Simpan sebagai v${version + 1}`}</Button></div>
       </>}
     </Dialog>
   </div>

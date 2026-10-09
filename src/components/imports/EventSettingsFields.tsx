@@ -1,5 +1,5 @@
 'use client'
-import { Icon } from '@/components/ui'
+import { Icon , Label, Input, NativeSelect, NativeSelectOption } from '@/components/ui'
 import { addSeconds, formatClock, localDate, localToUtc, toMs } from '@/lib/time'
 import type { Snapshot } from '@/modules/engine/types'
 import type { ImportSettings } from '@/modules/imports/types'
@@ -46,29 +46,29 @@ export function EventSettingsFields({ value, onChange, showErrors }: { value: Im
       </div>
       <div className="settings-fields">
         <div className="lc-field">
-          <div className="lc-field-label"><label htmlFor="event-name">Nama acara</label><span className="lc-tag">Wajib</span></div>
+          <div className="lc-field-label"><Label htmlFor="event-name">Nama acara</Label><span className="lc-tag">Wajib</span></div>
           <div className="lc-input">
             <Icon name="masks" />
-            <input id="event-name" value={value.name} maxLength={120} required aria-invalid={!!error || undefined} aria-describedby="event-name-hint" onChange={(e) => onChange({ ...value, name: e.target.value })} placeholder="Opening Night Showcase" />
+            <Input id="event-name" value={value.name} maxLength={120} required aria-invalid={!!error || undefined} aria-describedby="event-name-hint" onChange={(e) => onChange({ ...value, name: e.target.value })} placeholder="Opening Night Showcase" />
           </div>
           {error ? <p className="lc-error" role="alert">{error}</p> : <p id="event-name-hint" className="lc-small">Tertera pada teleprompter dan log cue.</p>}
         </div>
         <div className="lc-field">
-          <div className="lc-field-label"><label htmlFor="event-tz">Zona waktu</label><span className="lc-tag">Wajib</span></div>
+          <div className="lc-field-label"><Label htmlFor="event-tz">Zona waktu</Label><span className="lc-tag">Wajib</span></div>
           <div className="lc-input">
             <Icon name="clock" />
-            <select id="event-tz" value={value.timezone} onChange={(e) => onChange({ ...value, timezone: e.target.value as ImportSettings['timezone'] })} aria-describedby="event-tz-hint">
-              {TIMEZONES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
-            </select>
+            <NativeSelect id="event-tz" value={value.timezone} onChange={(e) => onChange({ ...value, timezone: e.target.value as ImportSettings['timezone'] })} aria-describedby="event-tz-hint">
+              {TIMEZONES.map((t) => <NativeSelectOption key={t.value} value={t.value}>{t.label}</NativeSelectOption>)}
+            </NativeSelect>
             <Icon name="chevron-down" size={10} />
           </div>
           <p id="event-tz-hint" className="lc-small">Patokan sinkronisasi waktu master clock.</p>
         </div>
         <div className="lc-field">
-          <div className="lc-field-label"><label htmlFor="event-curfew">Batas selesai acara</label><span className="lc-tag" data-optional="true">Opsional</span></div>
+          <div className="lc-field-label"><Label htmlFor="event-curfew">Batas selesai acara</Label><span className="lc-tag" data-optional="true">Opsional</span></div>
           <div className="lc-input">
             <Icon name="timer-off" />
-            <input id="event-curfew" type="time" data-strong="true" value={value.curfew_hhmm ?? ''} aria-describedby="event-curfew-hint" onChange={(e) => onChange({ ...value, curfew_hhmm: e.target.value || null })} />
+            <Input id="event-curfew" type="time" data-strong="true" value={value.curfew_hhmm ?? ''} aria-describedby="event-curfew-hint" onChange={(e) => onChange({ ...value, curfew_hhmm: e.target.value || null })} />
             {value.curfew_hhmm && <span className="lc-input-suffix">{abbr}</span>}
           </div>
           <p id="event-curfew-hint" className="lc-small">Peringatan otomatis saat alur mendekati batas ({abbr}).</p>
