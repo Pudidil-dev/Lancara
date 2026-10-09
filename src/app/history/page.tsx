@@ -7,12 +7,13 @@ import type { HistoryResponse } from '@/components/briefs/types'
 import styles from '@/components/briefs/briefs.module.css'
 import { useSession } from '@/hooks/useSession'
 import { usePolling } from '@/hooks/usePolling'
-import { EVENT_ID } from '@/hooks/types'
+import { useEvent } from '@/hooks/useEvent'
 import { formatClock, zoneAbbrev } from '@/lib/time'
 
 const SOURCE_LABEL: Record<string, string> = { seed: 'Data demo awal', setup: 'Pengaturan rundown', item_status: 'Status aktivitas', decision: 'Keputusan' }
 
 export default function HistoryPage() {
+  const { eventId: EVENT_ID } = useEvent()
   const { session } = useSession()
   const query = usePolling<HistoryResponse>(session ? `/api/events/${EVENT_ID}/history` : null)
   const data = query.data

@@ -2,15 +2,16 @@
 
 import { useEffect, useState } from 'react'
 import { AppShell } from '@/components/shell/AppShell'
-import { EmptyState, ErrorState, Loading } from '@/components/ui'
+import { EmptyState, ErrorState, Loading , Button } from '@/components/ui'
 import { BriefCard } from '@/components/briefs/BriefCard'
 import type { AckResult, InboxResponse } from '@/components/briefs/types'
 import { usePolling } from '@/hooks/usePolling'
 import { useSession } from '@/hooks/useSession'
-import { EVENT_ID } from '@/hooks/types'
+import { useEvent } from '@/hooks/useEvent'
 import { formatClock, zoneAbbrev } from '@/lib/time'
 
 export default function InboxPage() {
+  const { eventId: EVENT_ID } = useEvent()
   const { session } = useSession()
   const query = usePolling<InboxResponse>(session ? `/api/events/${EVENT_ID}/inbox` : null)
   const [unreadOnly, setUnreadOnly] = useState(false)
@@ -46,10 +47,10 @@ export default function InboxPage() {
     {data && <>
       <div className="row between"><h2>Brief acara · {unread} belum dibaca</h2><span className="muted">Rundown aktif v{data.active_version}</span></div>
       <div className="pill-filters" role="group" aria-label="Filter brief">
-        <button className="btn" aria-pressed={!unreadOnly} onClick={() => setUnreadOnly(false)}>Semua</button>
-        <button className="btn" aria-pressed={unreadOnly} onClick={() => setUnreadOnly(true)}>Belum dibaca ({unread})</button>
+        <Button variant="outline" className="btn" aria-pressed={!unreadOnly} onClick={() => setUnreadOnly(false)}>Semua</Button>
+        <Button variant="outline" className="btn" aria-pressed={unreadOnly} onClick={() => setUnreadOnly(true)}>Belum dibaca ({unread})</Button>
       </div>
-      {briefs.length === 0 ? <EmptyState title="Belum ada brief acara." /> : visible.length === 0 ? <EmptyState title="Semua brief sudah dibaca." action={<button className="btn" onClick={() => setUnreadOnly(false)}>Lihat semua brief</button>} /> : visible.map(brief => <BriefCard key={brief.id} brief={brief} acknowledgedAt={brief.acknowledged_at ?? confirmedAcks[brief.id] ?? null} onAcknowledged={acknowledged} onShowRevision={id => { setUnreadOnly(false); setRevisionTarget(id) }} />)}
+      {briefs.length === 0 ? <EmptyState title="Belum ada brief acara." /> : visible.length === 0 ? <EmptyState title="Semua brief sudah dibaca." action={<Button variant="outline" className="btn" onClick={() => setUnreadOnly(false)}>Lihat semua brief</Button>} /> : visible.map(brief => <BriefCard key={brief.id} brief={brief} acknowledgedAt={brief.acknowledged_at ?? confirmedAcks[brief.id] ?? null} onAcknowledged={acknowledged} onShowRevision={id => { setUnreadOnly(false); setRevisionTarget(id) }} />)}
     </>}
   </div></AppShell>
 }

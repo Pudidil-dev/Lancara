@@ -50,12 +50,15 @@ export async function createSession(actorId: string): Promise<{ id: string; expi
 
 export async function loadSession(sessionId: string): Promise<Session | null> {
   const rows = await query<Session>(
-    `SELECT s.id AS session_id, a.id AS actor_id, a.display_name, a.event_id,
+    `SELECT s.id AS session_id, a.id AS actor_id, a.display_name,
+            COALESCE(s.selected_event_id, a.event_id) AS event_id,
             $3::text AS role_id, $4::text AS role_label, 'coordinator'::text AS capability
        FROM demo_sessions s
        JOIN actors a ON a.id = s.actor_id
       WHERE s.id = $1 AND s.expires_at > now()
-        AND (a.id = $2 OR EXISTS (SELECT 1 FROM users u WHERE u.actor_id = a.id))`,
+        AND (a.id = $2 OR EXISTS (SELECT 1 FROM users u WHERE u.actor_id = a.id))
+        AND (s.selected_event_id IS NULL OR s.selected_event_id = a.event_id
+             OR EXISTS (SELECT 1 FROM event_members m WHERE m.actor_id = a.id AND m.event_id = s.selected_event_id))`,
     [sessionId, SINGLE_ACCOUNT_ACTOR_ID, AUTHORIZATION_ROLE_ID, AUTHORIZATION_ROLE_LABEL],
   )
   return rows[0] ?? null

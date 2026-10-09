@@ -7,8 +7,6 @@ export interface RundownResponse {
   event: { id: string; name: string; timezone: string; active_version: number; sim_clock_at: string | null }
   version: number; snapshot: Snapshot; validation: { errors: Violation[]; missing: Violation[] }; server_now: string; demo_mode: boolean
 }
-export const EVENT_ID = 'evt-ripple-demo'
-export const RUNDOWN_PATH = `/api/events/${EVENT_ID}/rundown`
 /** Baris GET /api/events/:id/changes untuk seluruh kabar acara. */
 export interface ChangeSummary {
   id: string; seq: number; kind: 'report' | 'correction' | 'compensation'
