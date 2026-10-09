@@ -123,10 +123,13 @@ export async function notificationLog(session: Session, eventId: string, limit: 
 export async function retryDelivery(session: Session, eventId: string, deliveryId: string, input: { idempotency_key: string; action?: 'retry' | 'mark_sent' }) {
   access(session, eventId)
   return withTransaction(client => idempotent(client, { eventId, actorId: session.actor_id, operation: `notifier.retry:${deliveryId}`, key: input.idempotency_key, payload: input }, async () => {
+    // Urutan lock grup → delivery sama dengan revoke dan pembaruan chat.
+    await client.query(`SELECT g.id FROM telegram_groups g JOIN notification_deliveries d ON d.group_id = g.id
+      JOIN notification_outbox o ON o.id = d.outbox_id WHERE d.id = $1 AND o.event_id = $2 FOR UPDATE OF g`, [deliveryId, eventId])
     const rows = await query<{ outbox_id: string; status: string; group_status: string }>(
       `SELECT d.outbox_id, d.status, g.status AS group_status FROM notification_deliveries d
        JOIN notification_outbox o ON o.id = d.outbox_id JOIN telegram_groups g ON g.id = d.group_id
-       WHERE d.id = $1 AND o.event_id = $2 FOR UPDATE OF d, o, g`, [deliveryId, eventId], client,
+       WHERE d.id = $1 AND o.event_id = $2 FOR UPDATE OF d, o`, [deliveryId, eventId], client,
     )
     const delivery = rows[0]
     if (!delivery) throw new AppError('NOT_FOUND', 'Pengiriman tidak ditemukan pada acara ini.')

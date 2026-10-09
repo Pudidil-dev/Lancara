@@ -79,7 +79,7 @@ async function prepare(outbox: Outbox) {
       await client.query(
         `INSERT INTO notification_deliveries (outbox_id, group_id, chat_id, rendered_text, mentioned_tg_ids)
          VALUES ($1,$2,$3,$4,$5) ON CONFLICT (outbox_id,group_id) DO NOTHING`,
-        [outbox.id, group.id, group.chat_id, rendered, recipients.mentions.map(mention => mention.telegram_user_id)],
+        [outbox.id, group.id, group.chat_id, rendered, [...rendered.matchAll(/tg:\/\/user\?id=(\d+)/g)].map(match => match[1])],
       )
     }
     await client.query("UPDATE notification_outbox SET status = 'ready', summary_text = $2, summary_source = $3, locked_until = NULL, last_error = NULL WHERE id = $1", [outbox.id, summary.paragraph, summary.source])
@@ -102,7 +102,7 @@ async function reserveDelivery(): Promise<Delivery | 'deferred' | null> {
        WHERE o.status = 'ready' AND d.status IN ('queued','retry','ambiguous') AND d.next_attempt_at <= now()
        AND NOT EXISTS (SELECT 1 FROM notification_deliveries p JOIN notification_outbox po ON po.id = p.outbox_id
           WHERE po.event_id = o.event_id AND po.version < o.version AND p.attempts = 0 AND p.status IN ('queued','retry'))
-       ORDER BY o.version, d.created_at LIMIT 1 FOR UPDATE OF d, g SKIP LOCKED`, [], client,
+       ORDER BY o.version, d.created_at LIMIT 1 FOR UPDATE OF d SKIP LOCKED`, [], client,
     )
     const delivery = rows[0]
     if (!delivery) return null
