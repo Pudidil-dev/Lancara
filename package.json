@@ -1,8 +1,8 @@
 {
-  "name": "ripple-app",
+  "name": "lancara-app",
   "version": "0.1.0",
   "private": true,
-  "description": "Ripple — Live Event Recovery Engine (prototipe demo hackathon)",
+  "description": "LANCARA — Live Event Recovery Engine (prototipe demo hackathon)",
   "engines": {
     "node": ">=20.11"
   },

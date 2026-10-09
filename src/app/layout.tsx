@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { Plus_Jakarta_Sans } from 'next/font/google'
 import './globals.css'
+import { PRODUCT_NAME } from '@/lib/brand'
 
 // Typeface dari Figma (Ripple/h1…caption): Plus Jakarta Sans 400/500/600/700.
 const jakarta = Plus_Jakarta_Sans({
@@ -11,8 +12,16 @@ const jakarta = Plus_Jakarta_Sans({
 })
 
 export const metadata: Metadata = {
-  title: 'Ripple — Live Event Recovery',
-  description: 'Prototipe demo: kabar perubahan → dampak → opsi → persetujuan → brief kru.',
+  title: `${PRODUCT_NAME} — Live Event Recovery`,
+  applicationName: PRODUCT_NAME,
+  description: `${PRODUCT_NAME}: kelola perubahan acara, sesuaikan rundown, dan kirim brief ke kru.`,
+  openGraph: {
+    title: `${PRODUCT_NAME} — Live Event Recovery`,
+    siteName: PRODUCT_NAME,
+    description: 'Kelola perubahan acara, sesuaikan rundown, dan kirim brief ke kru.',
+    locale: 'id_ID',
+    type: 'website',
+  },
 }
 
 export const viewport: Viewport = { width: 'device-width', initialScale: 1 }

@@ -1,4 +1,4 @@
-# Ripple — prototipe demo (hackathon)
+# LANCARA — prototipe demo (hackathon)
 
 Live Event Recovery Engine: satu kabar perubahan → opsi jadwal yang lolos batas → persetujuan koordinator → brief ke kru terdampak → konfirmasi "Sudah dibaca" → riwayat keputusan.
 

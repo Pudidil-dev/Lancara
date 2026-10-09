@@ -10,6 +10,7 @@ import { RUNDOWN_PATH, type RundownResponse } from '@/hooks/types'
 import { formatClock, formatClockFull, zoneAbbrev } from '@/lib/time'
 import { ErrorState, Icon, Loading, type IconName } from '@/components/ui'
 import { Brand } from './Brand'
+import { PRODUCT_NAME } from '@/lib/brand'
 import { PageHeaderContext } from './PageHeader'
 import { SupportChat } from '@/components/support/SupportChat'
 
@@ -61,7 +62,7 @@ export function AppShell({ children, title, description, actions }: { children: 
   return <>
     <a className="skip-link" href="#main">Lewati ke isi</a>
     <div className="app-shell">
-      <aside className="sidebar" aria-label="Ripple">
+      <aside className="sidebar" aria-label={PRODUCT_NAME}>
         <Brand />
         <nav className="sidebar-nav" aria-label="Navigasi utama">
           {links.map((link) => <Link key={link.href} href={link.href} className="nav-item" aria-current={link.match(pathname) ? 'page' : undefined}>
