@@ -21,8 +21,8 @@ export const FALLBACK_ANSWER =
 const ENTRIES: Entry[] = [
   {
     keys: ['lapor', 'kabar', 'telat', 'terlambat', 'molor', 'batal', 'tukar', 'datang'],
-    answer: () => 'Laporkan kabar perubahan di Kabar baru, misalnya "Talent B baru bisa mulai jam 20.05". Sistem menafsirkan kabar itu dulu; tafsiran harus dikonfirmasi sebelum opsi dihitung. Rundown aktif belum berubah sampai koordinator menyetujui opsi.',
-    suggestions: () => [{ label: 'Kabar baru', href: '/changes/new' }],
+    answer: () => 'Laporkan kabar perubahan lewat panel Lancara Support di Dashboard, misalnya "Talent B baru bisa mulai jam 20.05". Sistem menafsirkan kabar itu dulu; tafsiran harus dikonfirmasi sebelum opsi dihitung. Rundown aktif belum berubah sampai koordinator menyetujui opsi.',
+    suggestions: () => [{ label: 'Dashboard', href: '/rundown' }],
   },
   {
     keys: ['setuju', 'approve', 'persetujuan', 'menyetujui', 'disetujui'],
@@ -31,18 +31,18 @@ const ENTRIES: Entry[] = [
   },
   {
     keys: ['tidak ada opsi', 'tidak feasible', 'feasible', 'tidak muncul', 'kenapa tidak', 'opsi kosong'],
-    answer: () => 'Tidak ada opsi berarti tidak ditemukan kombinasi yang lolos semua batas tercatat, misalnya jam selesai acara atau slot tetap, dalam pencarian terbatas. Itu bukan bukti bahwa tidak ada jadwal lain. Periksa batas di Pengaturan atau coba waktu lain.',
-    suggestions: () => [{ label: 'Pengaturan batas', href: '/rundown/setup' }],
+    answer: () => 'Tidak ada opsi berarti tidak ditemukan kombinasi yang lolos semua batas tercatat, misalnya jam selesai acara atau slot tetap, dalam pencarian terbatas. Itu bukan bukti bahwa tidak ada jadwal lain. Periksa batas di menu Rundown atau Pengaturan, atau coba waktu lain.',
+    suggestions: () => [{ label: 'Rundown', href: '/rundown/setup' }],
   },
   {
     keys: ['terkunci', 'berlangsung', 'status', 'selesai'],
-    answer: () => 'Item yang sedang berlangsung atau sudah selesai terkunci: jam mulainya tidak dipindahkan otomatis. Koordinator dapat menandai Mulai atau Selesai di Rundown.',
-    suggestions: () => [{ label: 'Rundown', href: '/rundown' }],
+    answer: () => 'Item yang sedang berlangsung atau sudah selesai terkunci: jam mulainya tidak dipindahkan otomatis. Koordinator dapat membuka segmen di Dashboard lalu menandai mulai atau selesai.',
+    suggestions: () => [{ label: 'Dashboard', href: '/rundown' }],
   },
   {
     keys: ['brief', 'inbox', 'sudah dibaca', 'dibaca', 'konfirmasi'],
-    answer: () => 'Seluruh brief acara muncul di Inbox. Tekan "Sudah dibaca" setelah membacanya. Itu hanya tanda sudah membaca, bukan tanda bahwa aksi di lapangan sudah dilakukan.',
-    suggestions: () => [{ label: 'Inbox', href: '/inbox' }],
+    answer: () => 'Seluruh brief acara muncul di Konfirmasi perubahan. Tekan "Sudah dibaca" setelah membacanya. Itu hanya tanda sudah membaca, bukan tanda bahwa aksi di lapangan sudah dilakukan.',
+    suggestions: () => [{ label: 'Konfirmasi perubahan', href: '/inbox' }],
   },
   {
     keys: ['riwayat', 'versi', 'history', 'keputusan'],
@@ -51,8 +51,8 @@ const ENTRIES: Entry[] = [
   },
   {
     keys: ['jam simulasi', 'simulasi', 'reset', 'demo'],
-    answer: () => 'Jam simulasi dipakai untuk demo acara. Koordinator dapat memajukan jam atau mereset data demo dari halaman Rundown.',
-    suggestions: () => [{ label: 'Rundown', href: '/rundown' }],
+    answer: () => 'Jam simulasi dipakai untuk demo acara dan diatur saat data demo disiapkan; Dashboard memakainya untuk segmen yang sedang berlangsung dan sisa waktu.',
+    suggestions: () => [{ label: 'Dashboard', href: '/rundown' }],
   },
   {
     keys: ['login', 'masuk', 'akun', 'peran', 'keluar', 'logout'],
@@ -61,8 +61,8 @@ const ENTRIES: Entry[] = [
   },
   {
     keys: ['rundown', 'jadwal', 'setup', 'pengaturan', 'edit', 'ubah item', 'urutan'],
-    answer: () => 'Di Pengaturan, Anda dapat mengubah item, jam, durasi, PIC, dependensi, dan batas. Setiap simpan menjadi versi baru.',
-    suggestions: () => [{ label: 'Pengaturan', href: '/rundown/setup' }],
+    answer: () => 'Di menu Rundown, Anda dapat mengubah item, jam, durasi, PIC, dependensi, dan batas; nama acara, zona waktu, dan batas selesai ada di Pengaturan. Rundown dari PDF ditambahkan lewat tombol Tambah Rundown. Setiap simpan menjadi versi baru.',
+    suggestions: () => [{ label: 'Rundown', href: '/rundown/setup' }],
   },
 ]
 

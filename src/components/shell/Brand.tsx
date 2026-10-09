@@ -6,7 +6,7 @@ import { BRAND_WORDMARK, PRODUCT_NAME } from '@/lib/brand'
 export function Brand() {
   return (
     <Link href="/" className="brand" aria-label={`${PRODUCT_NAME} beranda`}>
-      <Icon name="lancara" size={22} />
+      <Icon name="lancara-mark" size={22} />
       <span className="brand-text">{BRAND_WORDMARK}</span>
     </Link>
   )

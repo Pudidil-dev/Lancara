@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
-import { Plus_Jakarta_Sans } from 'next/font/google'
+import { Inter, Plus_Jakarta_Sans } from 'next/font/google'
 import './globals.css'
+import './lancara-figma.css'
 import { PRODUCT_NAME } from '@/lib/brand'
 import { PollingProvider } from '@/hooks/PollingProvider'
 
@@ -11,6 +12,8 @@ const jakarta = Plus_Jakarta_Sans({
   display: 'swap',
   variable: '--font-jakarta',
 })
+// Layar Tambah Rundown di Figma (40:328, 60:2280, 66:2938) memakai Inter untuk judul dan teks isian.
+const inter = Inter({ subsets: ['latin'], weight: ['400', '600', '700'], display: 'swap', variable: '--font-inter-family' })
 
 export const metadata: Metadata = {
   title: `${PRODUCT_NAME} — Live Event Recovery`,
@@ -29,7 +32,7 @@ export const viewport: Viewport = { width: 'device-width', initialScale: 1 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="id" className={jakarta.variable}>
+    <html lang="id" className={`${jakarta.variable} ${inter.variable}`}>
       <body><PollingProvider>{children}</PollingProvider></body>
     </html>
   )

@@ -1,15 +1,9 @@
-import { formatClock } from '@/lib/time'
 import { endMs } from '@/modules/engine/schedule'
 import type { Item, Snapshot } from '@/modules/engine/types'
-import type { RundownTone } from '@/components/ui'
 
 /** Akhir efektif item: sesi aktif memakai estimasi selesai (sama dengan engine), bukan mulai + durasi rencana. */
 export function itemEnd(item: Item): number {
   return endMs(item)
-}
-
-export function minutesLabel(seconds: number): string {
-  return `${Math.round(seconds / 60)} m`
 }
 
 export function roleNames(ids: string[], snapshot: Snapshot): string[] {
@@ -20,26 +14,6 @@ export function roleNames(ids: string[], snapshot: Snapshot): string[] {
 export function picLabel(item: Item, snapshot: Snapshot): string {
   const names = roleNames(item.pic_role_ids, snapshot).map((n) => n.replace(/^PIC\s+/i, ''))
   return names.length ? names.join(' / ') : 'PIC belum diisi'
-}
-
-export function rowStatus(item: Item, snapshot: Snapshot): { text: string; tone: RundownTone } {
-  if (item.status === 'in_progress') return { text: 'Berlangsung', tone: 'success' }
-  if (item.status === 'completed') return { text: 'Selesai', tone: 'success' }
-  if (item.status === 'cancelled') return { text: 'Dibatalkan', tone: 'danger' }
-  const fixed = snapshot.constraints.some((c) => c.item_id === item.id && c.type === 'fixed_start')
-  return { text: fixed ? 'Slot tetap' : 'Terjadwal', tone: 'muted' }
-}
-
-export function rowSubtitle(item: Item, snapshot: Snapshot): string {
-  const zone = snapshot.event.timezone
-  const parts: string[] = []
-  if (item.status === 'in_progress' || item.status === 'completed') parts.push('Terkunci')
-  for (const c of snapshot.constraints.filter((x) => x.item_id === item.id)) {
-    parts.push(c.type === 'fixed_start' ? 'Mulai tetap' : `Paling awal ${formatClock(c.at, zone)}`)
-  }
-  if (item.status === 'pending' && item.swappable) parts.push('Boleh ditukar')
-  parts.push(item.id)
-  return parts.join(' · ')
 }
 
 export function countdown(ms: number): string {

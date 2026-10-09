@@ -141,7 +141,7 @@ export function AgentChat() {
 
   return <section className="agent-panel" aria-labelledby={`${uid}-title`}>
     <header className="agent-head">
-      <span className="agent-logo" aria-hidden="true"><Icon name="lancara" size={22} /></span>
+      <span className="agent-logo" aria-hidden="true"><Icon name="lancara-mark" size={22} /></span>
       <div><h2 id={`${uid}-title`}>Lancara Support</h2><p>AI Assistant</p></div>
     </header>
     <div ref={logRef} className="agent-log" role="log" aria-live="polite" aria-relevant="additions">

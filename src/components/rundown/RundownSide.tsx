@@ -1,15 +1,16 @@
 import Link from 'next/link'
-import { Icon } from '@/components/ui'
+import type { HistoryDecision } from '@/components/briefs/types'
 import type { ChangeSummary } from '@/hooks/types'
-import { formatClock, zoneAbbrev } from '@/lib/time'
+import { formatClock } from '@/lib/time'
 import type { Snapshot } from '@/modules/engine/types'
 import { countdown, projectedFinishMs } from './rundown-format'
 
 const PENDING = new Set<ChangeSummary['status']>(['draft', 'needs_clarification', 'preview_ready'])
 export const pendingChanges = (changes: ChangeSummary[] | null | undefined) => (changes ?? []).filter((c) => PENDING.has(c.status))
 
-const STATUS_LABEL: Record<string, string> = { preview_ready: 'Perlu ditinjau', needs_clarification: 'Perlu klarifikasi', draft: 'Draf' }
 const snippet = (text: string | null, max = 56) => (text ? (text.length > max ? `${text.slice(0, max - 1)}…` : text) : 'Kabar manual')
+/** Jam "18:30" seperti Figma (titik dua). */
+export const hhmm = (iso: string, zone: string) => formatClock(iso, zone).replace('.', ':')
 
 /** Tiga kartu ringkasan (Figma "Live event summary"). */
 export function SummaryCards({ snapshot, now, changes }: { snapshot: Snapshot; now: string; changes: ChangeSummary[] | null }) {
@@ -21,76 +22,59 @@ export function SummaryCards({ snapshot, now, changes }: { snapshot: Snapshot; n
   const waiting = pendingChanges(changes)
   const latest = waiting[0]
   const finish = projectedFinishMs(snapshot)
-  const curfew = Date.parse(snapshot.event.curfew_at)
-  const slackMin = Math.round((curfew - finish) / 60000)
-  const nextNote = next ? (Date.parse(next.start_at) > nowMs ? `${countdown(Date.parse(next.start_at) - nowMs)} menuju ${next.title}` : `${next.title} seharusnya sudah mulai`) : 'Tidak ada item berikutnya'
+  const slackMin = Math.round((Date.parse(snapshot.event.curfew_at) - finish) / 60000)
+  const nextNote = next ? (Date.parse(next.start_at) > nowMs ? `${countdown(Date.parse(next.start_at) - nowMs)} menuju ${next.title}` : `${next.title} seharusnya sudah mulai`) : 'Tidak ada segmen berikutnya'
+  const review = (
+    <>
+      <p className="dash-card-label">Perlu ditinjau</p>
+      <p className="dash-card-value">{waiting.length ? `${waiting.length} Perubahan` : 'Tidak ada'}</p>
+      <p className="dash-card-note">{latest ? `${snippet(latest.original_text, 36)} - dilaporkan ${latest.actor_name}` : 'Semua kabar sudah ditangani'}</p>
+    </>
+  )
   return (
-    <div className="summary-grid">
-      <section className="summary-card" aria-label="Sedang berlangsung">
-        <p className="summary-label">SEDANG BERLANGSUNG</p>
-        <p className="summary-value" data-tone="brand">{live?.title ?? 'Belum ada'}</p>
-        <p className="summary-note">{nextNote}</p>
+    <div className="dash-summary">
+      <section className="dash-card" data-accent="true" aria-label="Sedang berlangsung">
+        <p className="dash-card-label">Sedang berlangsung</p>
+        <p className="dash-card-value">{live?.title ?? 'Belum ada'}</p>
+        <p className="dash-card-note">{nextNote}</p>
       </section>
-      <section className="summary-card" aria-label="Perlu ditinjau">
-        <p className="summary-label">PERLU DITINJAU</p>
-        <p className="summary-value" data-tone={waiting.length ? 'warning' : undefined}>{waiting.length ? `${waiting.length} perubahan` : 'Tidak ada'}</p>
-        <p className="summary-note">{latest ? `${snippet(latest.original_text, 40)} · dilaporkan ${latest.actor_name}` : 'Semua kabar sudah ditangani'}</p>
-      </section>
-      <section className="summary-card" aria-label="Estimasi selesai">
-        <p className="summary-label">ESTIMASI SELESAI</p>
-        <p className="summary-value" data-tone={slackMin < 0 ? 'danger' : undefined}>{formatClock(new Date(finish).toISOString(), zone)}</p>
-        <p className="summary-note">{slackMin >= 0 ? `${slackMin} menit sebelum batas acara` : `${-slackMin} menit melewati batas acara`}</p>
+      {latest
+        ? <Link className="dash-card" data-accent="true" href={`/changes/${latest.id}`} aria-label={`Perlu ditinjau: ${waiting.length} perubahan`}>{review}</Link>
+        : <section className="dash-card" data-accent="true" aria-label="Perlu ditinjau">{review}</section>}
+      <section className="dash-card" aria-label="Estimasi selesai">
+        <p className="dash-card-label">Estimasi selesai</p>
+        <p className="dash-card-value" data-tone={slackMin < 0 ? 'danger' : 'success'}>{Number.isFinite(finish) ? hhmm(new Date(finish).toISOString(), zone) : '—'}</p>
+        <p className="dash-card-note">{slackMin >= 0 ? `${slackMin} menit sebelum batas acara` : `${-slackMin} menit melewati batas acara`}</p>
       </section>
     </div>
   )
 }
 
-/** Panel "Latest change" (Figma): kabar terbaru yang menunggu keputusan. */
-export function LatestChange({ changes }: { changes: ChangeSummary[] | null }) {
-  const latest = pendingChanges(changes)[0]
+/** Kartu "Riwayat perubahan · Selisih dari jadwal awal" dari keputusan terbaru. */
+export function ChangeHistoryCard({ decision, zone }: { decision: HistoryDecision | undefined; zone: string }) {
+  const moved = (decision?.diff ?? [])
+    .filter((d) => d.old && d.new && d.changes.includes('start'))
+    .sort((a, b) => Math.abs(b.start_shift_seconds) - Math.abs(a.start_shift_seconds))[0]
+  const cancelled = (decision?.diff ?? []).find((d) => d.new?.status === 'cancelled')
+  const minutes = moved ? Math.round(moved.start_shift_seconds / 60) : 0
+  const badge = moved ? (minutes > 0 ? `Terlambat ${minutes} menit` : `Maju ${-minutes} menit`) : cancelled ? 'Dibatalkan' : decision ? 'Diperbarui' : 'Belum ada'
+  const reason = decision?.original_text ?? decision?.reason
+  const target = moved ?? cancelled ?? decision?.diff[0]
+  const text = decision
+    ? `Rundown berubah ${target?.title ?? decision.patch_label} ${moved ? (minutes > 0 ? 'dimundurkan' : 'dimajukan') : cancelled ? 'dibatalkan' : 'diperbarui'}${reason ? ` dikarenakan ${reason.replace(/\.$/, '')}` : ''}`
+    : 'Perubahan yang disetujui akan tampil di sini beserta selisih dari jadwal awal.'
   return (
-    <section className="panel" aria-labelledby="latest-change-title">
-      <div className="row between">
-        <span className="badge badge-warning">{latest ? STATUS_LABEL[latest.status] : 'Tidak ada antrean'}</span>
-        {latest && <span className="muted small">CH-{latest.seq}</span>}
-      </div>
-      <h2 id="latest-change-title">{latest ? snippet(latest.original_text, 48) : 'Belum ada kabar menunggu'}</h2>
-      <p className="muted">{latest ? 'Tinjau tafsiran, dampak, dan opsi sebelum menyetujui. Rundown aktif belum berubah.' : 'Kabar baru yang dilaporkan akan muncul di sini sampai diputuskan.'}</p>
-      {latest && <p className="muted small">{latest.actor_name}</p>}
-      <Link className="btn btn-primary" href={latest ? `/changes/${latest.id}` : '/changes/new'}>{latest ? 'Tinjau perubahan' : 'Laporkan perubahan'}</Link>
-    </section>
-  )
-}
-
-/** Panel "Batas yang dijaga": slot tetap yang belum lewat + batas selesai acara. */
-export function GuardedLimits({ snapshot }: { snapshot: Snapshot }) {
-  const zone = snapshot.event.timezone
-  const fixed = snapshot.constraints
-    .filter((c) => c.type === 'fixed_start')
-    .map((c) => ({ c, item: snapshot.items.find((i) => i.id === c.item_id) }))
-    .filter((x) => x.item && x.item.status === 'pending')
-    .sort((a, b) => Date.parse(a.c.at) - Date.parse(b.c.at))
-  return (
-    <section className="panel" aria-labelledby="limits-title">
-      <h2 id="limits-title" className="h3">Batas yang dijaga</h2>
-      {fixed.map(({ c, item }) => (
-        <div className="limit-row" key={c.id}>
-          <Icon name="lock" size={20} />
-          <span><span className="limit-value">{formatClock(c.at, zone)}</span><span className="limit-label">Slot {item!.title} tetap</span></span>
+    <section className="dash-left" aria-labelledby="history-card-title">
+      <p className="dash-history-label">Riwayat perubahan</p>
+      <div className="dash-history">
+        <div className="dash-history-head">
+          <h2 id="history-card-title">Selisih dari jadwal awal</h2>
+          <span className="lc-badge" data-tone={moved && minutes < 0 ? 'success' : undefined}>{badge}</span>
         </div>
-      ))}
-      <div className="limit-row">
-        <Icon name="lock" size={20} />
-        <span><span className="limit-value">{formatClock(snapshot.event.curfew_at, zone)}</span><span className="limit-label">Batas selesai acara</span></span>
+        {moved?.old && moved.new && <p className="dash-history-shift">{`${hhmm(moved.old.start_at, zone)}  →  ${hhmm(moved.new.start_at, zone)}`}</p>}
+        <p className="dash-history-text">{text}</p>
+        {decision && <Link className="template-link" href="/history">Lihat riwayat lengkap · Rundown v{decision.new_version}</Link>}
       </div>
-      <p className="muted small">Opsi penyesuaian selalu diperiksa terhadap batas ini.</p>
     </section>
   )
 }
-
-export function VersionLine({ version, syncedAt, zone }: { version: number; syncedAt: string | null; zone: string }) {
-  return (
-    <p className="version-line"><Icon name="history" size={20} />Rundown v{version}{syncedAt ? ` · tersinkron ${formatClock(syncedAt, zone)} ${zoneAbbrev(zone)}` : ''}</p>
-  )
-}
-
