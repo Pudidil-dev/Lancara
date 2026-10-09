@@ -10,11 +10,14 @@ const LATE = /\b(telat|terlambat|delay|baru bisa|baru sampai|baru tiba|baru data
 const ESTIMATE = /\b(sekitar|kira[- ]?kira|kurang lebih|perkiraan|estimasi|kayaknya|mungkin|an)\b|\d(an)\b/
 
 function matchItems(text: string, snapshot: Snapshot): string[] {
-  const exact = snapshot.items.filter((i) => text.includes(i.title.toLowerCase()))
+  const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  // Batas kata penting: "talent baru" bukan penyebutan "Talent B".
+  const exact = snapshot.items.filter((i) => new RegExp(`\\b${escape(i.title.toLowerCase())}\\b`).test(text))
   if (exact.length) {
-    // Pilih judul terpanjang agar "talent b" tidak juga menangkap "talent".
-    const longest = Math.max(...exact.map((i) => i.title.length))
-    return exact.filter((i) => i.title.length === longest).map((i) => i.id)
+    // Singkirkan hanya judul yang merupakan bagian dari judul lebih spesifik.
+    // Dua item berbeda yang disebut tetap menjadi pilihan klarifikasi.
+    return exact.filter((i) => !exact.some((other) => other.title.length > i.title.length
+      && other.title.toLowerCase().includes(i.title.toLowerCase()))).map((i) => i.id)
   }
   const tokenMatches = snapshot.items.filter((i) =>
     i.title
@@ -34,10 +37,12 @@ function hourFor(h: number, text: string): number {
 }
 
 function parseTime(text: string): string | null {
-  const explicit = /(?:jam|pukul|pkl\.?)\s*(\d{1,2})(?:[.:](\d{2}))?/.exec(text) ?? /\b(\d{1,2})[.:](\d{2})\b/.exec(text)
-  if (!explicit) return null
-  const h = hourFor(Number(explicit[1]), text)
-  const m = Number(explicit[2] ?? '0')
+  const matches = [...text.matchAll(/(?:jam|pukul|pkl\.?)\s*(\d{1,2})(?:[.:](\d{2}))?|\b(\d{1,2})[.:](\d{2})\b/g)]
+  // Beberapa jam dalam satu kabar belum tentu jam yang dimaksud; jangan pilih pertama.
+  if (matches.length !== 1) return null
+  const match = matches[0]
+  const h = hourFor(Number(match[1] ?? match[3]), text)
+  const m = Number(match[2] ?? match[4] ?? '0')
   if (h > 23 || m > 59) return null
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
 }
@@ -52,6 +57,7 @@ function parseMinutes(fragment: string): number | null {
 
 export function ruleExtract(rawText: string, snapshot: Snapshot): Extraction {
   const text = rawText.toLowerCase().replace(/\s+/g, ' ').trim()
+    .replace(/\bbs\b/g, 'bisa').replace(/\bterlmbat\b/g, 'terlambat')
   const notes: string[] = []
   const type = CANCEL.test(text) ? 'cancel_item' : OVERRUN.test(text) ? 'active_end_estimate' : LATE.test(text) ? 'earliest_start' : null
   const item_ids = matchItems(text, snapshot)

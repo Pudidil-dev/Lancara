@@ -16,7 +16,7 @@ export const ExtractionSchema = z.object({
   offset_base: z.enum(['reference', 'planned_start', 'planned_end']).nullable(),
   is_estimate: z.boolean(),
   notes: z.array(z.string()).max(5),
-})
+}).strict()
 export type Extraction = z.infer<typeof ExtractionSchema>
 
 export interface Question {
