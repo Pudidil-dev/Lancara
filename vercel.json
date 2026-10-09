@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
-  "buildCommand": "npm run vercel-build",
+  "buildCommand": "DATABASE_URL=\"${DATABASE_URL_MIGRATIONS:?DATABASE_URL_MIGRATIONS must use a direct or session connection}\" npx tsx scripts/migrate.ts && npm run build",
   "regions": ["sin1"]
 }
