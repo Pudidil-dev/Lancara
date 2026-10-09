@@ -25,18 +25,26 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.132.1",
+    "@dnd-kit/core": "6.3.1",
+    "@dnd-kit/sortable": "10.0.0",
+    "@dnd-kit/utilities": "3.2.2",
+    "exceljs": "4.4.0",
     "next": "15.5.27",
+    "papaparse": "5.7.0",
     "pg": "8.16.3",
     "react": "19.1.1",
     "react-dom": "19.1.1",
+    "unpdf": "1.7.0",
     "zod": "4.1.12"
   },
   "devDependencies": {
     "@playwright/test": "1.64.0",
     "@types/node": "22.18.8",
+    "@types/papaparse": "5.5.2",
     "@types/pg": "8.15.5",
     "@types/react": "19.1.17",
     "@types/react-dom": "19.1.11",
+    "pdf-lib": "1.17.1",
     "tsx": "4.20.6",
     "typescript": "5.9.3",
     "vitest": "3.2.4"

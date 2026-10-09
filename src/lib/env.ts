@@ -13,6 +13,15 @@ const EnvSchema = z.object({
   DEMO_CLOCK_ISO: z.string().optional(),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
   DB_POOL_MAX: z.coerce.number().int().min(1).max(20).default(3),
+  TELEGRAM_ENABLED: z.enum(['true', 'false']).default('false').transform(value => value === 'true'),
+  TELEGRAM_BOT_TOKEN: z.string().min(1).optional(),
+  TELEGRAM_WEBHOOK_SECRET: z.string().min(24).max(256).regex(/^[A-Za-z0-9_-]+$/, 'Secret webhook hanya boleh berisi huruf, angka, _ dan -').optional(),
+  TELEGRAM_BOT_USERNAME: z.string().min(5).max(32).regex(/^[A-Za-z][A-Za-z0-9_]+$/, 'Username bot tanpa @ atau URL').optional(),
+}).superRefine((value, ctx) => {
+  if (!value.TELEGRAM_ENABLED) return
+  for (const key of ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_WEBHOOK_SECRET', 'TELEGRAM_BOT_USERNAME'] as const) {
+    if (!value[key]) ctx.addIssue({ code: 'custom', path: [key], message: `${key} wajib diisi bila TELEGRAM_ENABLED=true` })
+  }
 })
 
 export type Env = z.infer<typeof EnvSchema>
@@ -30,6 +39,10 @@ export function env(): Env {
     OPENAI_API_KEY: process.env.OPENAI_API_KEY || undefined,
     APP_BASE_URL: process.env.APP_BASE_URL || undefined,
     DEMO_CLOCK_ISO: process.env.DEMO_CLOCK_ISO || undefined,
+    TELEGRAM_ENABLED: process.env.TELEGRAM_ENABLED || undefined,
+    TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || undefined,
+    TELEGRAM_WEBHOOK_SECRET: process.env.TELEGRAM_WEBHOOK_SECRET || undefined,
+    TELEGRAM_BOT_USERNAME: process.env.TELEGRAM_BOT_USERNAME || undefined,
   })
   if (!parsed.success) {
     throw new Error(`Konfigurasi environment tidak valid: ${parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ')}`)

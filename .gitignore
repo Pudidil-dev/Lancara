@@ -37,3 +37,6 @@ docs/
 evidence/
 
 .next-*
+tests/
+# Folder tes (unit, integrasi, e2e) — tidak ikut repo
+tests/
