@@ -1,0 +1,16 @@
+# Alternatif dev lokal bila Docker tersedia: docker compose up -d
+# DATABASE_URL=postgres://ripple:ripple@localhost:54329/ripple
+services:
+  db:
+    image: postgres:17.6
+    environment:
+      POSTGRES_USER: ripple
+      POSTGRES_PASSWORD: ripple
+      POSTGRES_DB: ripple
+    ports:
+      - '127.0.0.1:54329:5432'
+    volumes:
+      - ripple-pg:/var/lib/postgresql/data
+      - ./db/init-test-db.sql:/docker-entrypoint-initdb.d/init-test-db.sql:ro
+volumes:
+  ripple-pg:

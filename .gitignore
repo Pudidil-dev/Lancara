@@ -29,3 +29,11 @@ npm-debug.log*
 playwright-report
 test-results
 evidence/screenshots/*.tmp
+
+# Dokumen kerja (plan, handoff, evidence, catatan agent) — tidak ikut repo. README.md tetap di-track.
+*.md
+!README.md
+docs/
+evidence/
+
+.next-*
