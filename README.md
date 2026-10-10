@@ -56,13 +56,13 @@ Status verifikasi 9 Oktober 2026: `PROGRESS.md` melaporkan migration/seed Supaba
 1. **Supabase** → Project → **Connect** → salin connection string **Transaction pooler** (port `6543`), contoh:
    `postgres://postgres.<project-ref>:<DB_PASSWORD>@aws-0-<region>.pooler.supabase.com:6543/postgres?sslmode=require`
    Salin juga URL **Session pooler** (port `5432`) atau **Direct connection** untuk migration. Host harus berasal dari panel Connect; jangan menebak host dari region. `scripts/migrate.ts` memakai session advisory lock, sehingga migration memerlukan koneksi yang mempertahankan session; transaction pooler hanya dipakai runtime. Lihat [koneksi dan batas transaction mode Supabase](https://supabase.com/docs/guides/database/connecting-to-postgres#transaction-mode-limitations).
-2. **Vercel** → New Project → import repo ini (Root Directory = folder `ripple-app` bila repo berisi folder lain). Framework: Next.js. Build command dibaca dari `vercel.json`: migration memakai `DATABASE_URL_MIGRATIONS`, lalu `npm run build`; runtime tetap memakai `DATABASE_URL`. Region dikonfigurasi `sin1`. Pemilik repo melakukan commit dan menghubungkan Git secara manual; agent tidak commit/push.
+2. **Vercel** → New Project → import repo ini (Root Directory = folder `ripple-app` bila repo berisi folder lain). Framework: Next.js. Build command dibaca dari `vercel.json`: hanya `npm run build`; migrasi dijalankan manual sebelum deployment dan runtime tetap memakai `DATABASE_URL`. Region dikonfigurasi `sin1`. Pemilik repo melakukan commit dan menghubungkan Git secara manual; agent tidak commit/push.
 3. **Environment Variables** (Production + Preview):
 
    | Nama | Nilai |
    |---|---|
    | `DATABASE_URL` | connection string pooler di atas |
-   | `DATABASE_URL_MIGRATIONS` | URL Session pooler/Direct dengan `sslmode=require` (database yang sama) |
+   | `DATABASE_URL_MIGRATIONS` | Untuk migrasi manual di laptop: URL Session pooler/Direct dengan `sslmode=require` (database yang sama); tidak wajib di Vercel |
    | `SESSION_SECRET` | 64 karakter acak (`node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`) |
    | `DEMO_MODE` | `true` |
    | `DEMO_CLOCK_ISO` | `2026-10-09T11:40:00Z` (jam simulasi 18.40 WIB) |
@@ -86,7 +86,7 @@ Status verifikasi 9 Oktober 2026: `PROGRESS.md` melaporkan migration/seed Supaba
    }
    ```
    Seed tidak pernah otomatis dan tidak menghapus event yang sudah ada tanpa `--reset`.
-5. Deploy melalui dashboard atau CLI yang sudah login (`npx vercel --prod`). Build berhenti bila `DATABASE_URL_MIGRATIONS` belum diisi; log yang diharapkan: `schema up to date (6 file)` untuk schema saat ini (`001_init.sql` sampai `006_telegram_notifier.sql`). Advisory lock berlaku pada session migration, bukan connection transaction pooler.
+5. Deploy melalui dashboard atau CLI yang sudah login (`npx vercel --prod`). Build hanya menjalankan `npm run build`, tanpa migrasi atau seed otomatis. Sebelum deployment yang mengubah skema, jalankan migration manual lewat koneksi session/direct pada database tujuan. Pastikan seluruh file di `db/migrations` sudah tercatat di `schema_migrations`.
 6. Smoke publik: `/health/live` harus HTTP 200; `/health/ready` harus HTTP 200 dengan `status: "ready"`, `db: "ok"`, `seeded: true`. Login Rina → kabar "Talent B baru bisa mulai jam 20.05" → konfirmasi → 1 opsi tukar Panel/Talent B → approve → v2. Login Bayu → 1 brief ACTION → "Sudah dibaca" → reload tetap tercatat. POST `/api/session` dengan JSON tetapi tanpa header `Origin` harus 403.
 7. Catat URL, tanggal WIB, SHA commit pemilik yang benar-benar terdeploy, Node/region/schema aktual, provider AI, output smoke, serta lima sampel respons rundown/approve di evidence deploy. Request pertama setelah instance idle dicatat terpisah; jangan mengklaim cold start hanya dari request biasa.
 8. Reset sebelum presentasi: login koordinator → tombol reset demo. CLI `npm run db:reset` hanya setelah operator memastikan `DATABASE_URL` menunjuk database demo yang dimaksud.
