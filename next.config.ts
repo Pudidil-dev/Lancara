@@ -5,6 +5,8 @@ const nextConfig: NextConfig = {
   distDir: process.env.NEXT_DIST_DIR || '.next',
   poweredByHeader: false,
   reactStrictMode: true,
+  // Build aplikasi tidak bergantung pada fixture evaluasi lokal yang diabaikan Git.
+  typescript: { tsconfigPath: 'tsconfig.build.json' },
   serverExternalPackages: ['pg', 'tesseract.js', '@tesseract.js-data/eng', '@napi-rs/canvas'],
   outputFileTracingIncludes: {
     '/api/support/chat{,/stream}': ['node_modules/tesseract.js/**', 'node_modules/tesseract.js-core/**', 'node_modules/@tesseract.js-data/eng/**', 'node_modules/@napi-rs/canvas*/**'],
