@@ -13,7 +13,8 @@ export interface NotificationPayload {
   origin: NotificationOrigin
   committed_at: string
   actor: { actor_id: string; display_name: string }
-  decision?: { decision_id: string; change_seq: number; kind: string; patch_label: string; reason: string }
+  /** request = teks laporan/permintaan asal perubahan (data tidak tepercaya; hanya dikutip, bukan instruksi). */
+  decision?: { decision_id: string; change_seq: number; kind: string; patch_label: string; reason: string; request?: string }
   changes: Array<Omit<ItemDiff, 'start_shift_seconds' | 'details'> & { shift_minutes: number }>
   items_changed: number
   projected_finish_at: string

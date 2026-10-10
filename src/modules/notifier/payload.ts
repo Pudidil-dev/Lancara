@@ -22,6 +22,22 @@ export interface PayloadInput {
   importFilename?: string
 }
 
+const lower = (value: string) => value.toLocaleLowerCase('id-ID')
+const startMs = (entry: ItemDiff) => Date.parse(entry.old?.start_at ?? entry.new.start_at)
+
+/**
+ * Segmen yang disebut dalam permintaan menjadi pokok berita; sisanya pergeseran terbesar lalu jam mulai,
+ * sehingga segmen pemicu (paling awal) tidak kalah oleh urutan abjad ketika semua bergeser sama.
+ */
+export function orderChanges(diff: ItemDiff[], request?: string) {
+  const asked = request ? lower(request) : ''
+  const mentioned = (entry: ItemDiff) => Number(!!asked && asked.includes(lower(entry.title)))
+  return [...diff]
+    .sort((a, b) => mentioned(b) - mentioned(a) || Math.abs(b.start_shift_seconds) - Math.abs(a.start_shift_seconds) || startMs(a) - startMs(b) || a.item_id.localeCompare(b.item_id))
+    .slice(0, 30)
+    .map(({ start_shift_seconds, details: _details, ...entry }) => ({ ...entry, title: text(entry.title), shift_minutes: Math.round(start_shift_seconds / 60) }))
+}
+
 export function buildPayload(input: PayloadInput): NotificationPayload {
   const { base, proposed, origin } = input
   // A cached preview may contain earlier changes. Only this committed transition is reportable.
@@ -38,15 +54,14 @@ export function buildPayload(input: PayloadInput): NotificationPayload {
     event: { id: proposed.event.id, name: text(proposed.event.name), timezone: proposed.event.timezone, curfew_at: proposed.event.curfew_at },
     version: input.version, base_version: input.baseVersion, origin, committed_at: input.committedAt,
     actor: { actor_id: input.session.actor_id, display_name: text(input.session.display_name) },
-    changes: origin === 'import' || origin === 'settings' ? [] : [...diff]
-      .sort((a, b) => Math.abs(b.start_shift_seconds) - Math.abs(a.start_shift_seconds) || a.item_id.localeCompare(b.item_id))
-      .slice(0, 30).map(({ start_shift_seconds, details: _details, ...entry }) => ({ ...entry, title: text(entry.title), shift_minutes: Math.round(start_shift_seconds / 60) })),
+    changes: origin === 'import' || origin === 'settings' ? [] : orderChanges(diff, input.decision?.request),
     items_changed: diff.length,
     projected_finish_at: ends.at(-1) ?? proposed.event.curfew_at,
     impact: impact.map(role => ({ ...role, role_label: text(role.role_label), entries: role.entries.map(entry => ({ ...entry, title: text(entry.title), reason: text(entry.reason) })) })),
     roles: proposed.roles.map(role => ({ ...role, label: text(role.label) })),
     ...(config.length ? { config_changes: config } : {}),
-    ...(input.decision ? { decision: { ...input.decision, patch_label: text(input.decision.patch_label), reason: text(input.decision.reason) } } : {}),
+    ...(input.decision ? { decision: { ...input.decision, patch_label: text(input.decision.patch_label), reason: text(input.decision.reason),
+      ...(input.decision.request && text(input.decision.request) ? { request: text(input.decision.request) } : {}) } } : {}),
   }
   if (origin === 'import') payload.import_summary = {
     item_count: proposed.items.length,

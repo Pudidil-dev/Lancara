@@ -38,7 +38,8 @@ export function renderMessage({ payload, paragraph, recipients, publicUrl, retry
   const summary = boundedText(paragraph, 1900)
   const url = allowedPublicUrl(publicUrl)
   const footer = url ? `\n<a href="${url}">Lihat rundown</a>` : ''
-  const base = `${header}\n${summary}`
+  const request = payload.decision?.request ? `\nPermintaan: “${boundedText(payload.decision.request, 400)}”` : ''
+  const base = `${header}${request}\n${summary}`
   const available = MAX_MESSAGE - base.length - footer.length - '\nPIC: '.length - 40
   const chunks: string[] = []
   const ids = new Set<string>()

@@ -81,7 +81,7 @@ export async function approve(session: Session, changeId: string, input: Approve
         base: active, proposed: patch.proposed_snapshot, version: newVersion, baseVersion: input.base_version,
         session, origin: 'decision', diff: patch.diff, impact: patch.impact,
         committedAt: decision.rows[0].approved_at.toISOString(),
-        decision: { decision_id: decisionId, change_seq: Number(change.seq), kind: change.kind, patch_label: patch.label, reason: input.reason },
+        decision: { decision_id: decisionId, change_seq: Number(change.seq), kind: change.kind, patch_label: patch.label, reason: input.reason, ...(change.original_text?.trim() ? { request: change.original_text } : {}) },
       })
 
       let briefCount = 0
