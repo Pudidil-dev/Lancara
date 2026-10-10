@@ -87,9 +87,9 @@ export function UploadStep({ settings, record, onUploaded }: { settings: ImportS
           </ol>
         </section>
         <section className="template-card" aria-labelledby="template-title">
-          <strong id="template-title">Belum punya format PDF siap pakai?</strong>
+          <strong id="template-title">Belum punya format rundown siap pakai?</strong>
           <p className="lc-small">Unduh contoh rundown standar broadcast resmi Lancara untuk memudahkan tim panggung Anda.</p>
-          <a className="template-link" href="/api/imports/template" download><Icon name="download" size={11} />Unduh Template Rundown Standar (.pdf)</a>
+          <a className="template-link" href="/templates/Template_Rundown.docx" download="Template_Rundown.docx"><Icon name="download" size={11} />Unduh Template Rundown Standar</a>
         </section>
       </aside>
     </div>
