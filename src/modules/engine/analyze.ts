@@ -27,7 +27,7 @@ interface Draft {
 /** Hash canonical (engine_version + jadwal usulan) → candidate ID stabil, bukan UUID acak. */
 export function candidateIdFor(proposed: Snapshot, constraints = proposed.constraints): string {
   const canonical = sortByStart(proposed.items)
-    .map((i) => JSON.stringify([i.id, i.title, i.start_at, i.duration_seconds, i.min_duration_seconds, i.status, i.estimated_end_at, i.pic_role_ids, i.resource_ids, i.swappable]))
+    .map((i) => JSON.stringify([i.id, i.title, i.start_at, i.duration_seconds, i.min_duration_seconds, i.status, i.estimated_end_at, i.pic_role_ids, i.pic_text ?? '', i.resource_ids, i.swappable]))
     .join(';')
   const cons = [...constraints].sort((a, b) => a.id.localeCompare(b.id)).map((c) => JSON.stringify([c.id, c.type, c.item_id, c.at, c.hard, c.note ?? ''])).join(';')
   const config = JSON.stringify([
@@ -227,6 +227,8 @@ function reversalDraft(current: Snapshot, delta: Extract<Delta, { type: 'revert_
     item.status = b.status === 'cancelled' || b.status === 'pending' ? b.status : item.status
     item.title = b.title
     item.pic_role_ids = [...b.pic_role_ids]
+    if (b.pic_text === undefined) delete item.pic_text
+    else item.pic_text = b.pic_text
     item.resource_ids = [...b.resource_ids]
     item.swappable = b.swappable
   }

@@ -21,16 +21,12 @@ interface NavLink {
   label: string
   icon: IconName
   match: (pathname: string) => boolean
-  /** Figma Lancara/Sidebar/Notifications: item aktif berupa pil putih dengan teks brand. */
-  pill?: boolean
 }
 
-/** Menu sesuai Figma Ripple/Sidebar: Dashboard, Rundown, Perubahan Langsung, Notifikasi, Riwayat, Pengaturan. */
+/** Menu sesuai Figma Ripple/Sidebar: Dashboard, Rundown, Riwayat, Pengaturan. */
 const NAVIGATION: NavLink[] = [
-  { href: '/rundown', label: 'Dashboard', icon: 'layout-grid', match: (p) => p === '/rundown' || p.startsWith('/changes/') },
-  { href: '/rundown/setup', label: 'Rundown', icon: 'calendar-days', match: (p) => p.startsWith('/rundown/setup') || p.startsWith('/rundown/new') },
-  { href: '/inbox', label: 'Perubahan Langsung', icon: 'inbox', match: (p) => p.startsWith('/inbox') },
-  { href: '/notifications', label: 'Notifikasi', icon: 'bell-line', match: (p) => p.startsWith('/notifications'), pill: true },
+  { href: '/', label: 'Dashboard', icon: 'layout-grid', match: (p) => p === '/' || p.startsWith('/changes/') },
+  { href: '/rundown', label: 'Rundown', icon: 'calendar-days', match: (p) => p === '/rundown' || p.startsWith('/rundown/') },
   { href: '/history', label: 'Riwayat', icon: 'history', match: (p) => p.startsWith('/history') },
   { href: '/settings', label: 'Pengaturan', icon: 'settings-2', match: (p) => p.startsWith('/settings') },
 ]
@@ -93,7 +89,7 @@ export function AppShell({ children, title, description, actions, topbar = 'even
   function submitSearch(event: FormEvent) {
     event.preventDefault()
     const term = search.trim()
-    router.push(term ? `/rundown?q=${encodeURIComponent(term)}` : '/rundown')
+    router.push(term ? `/?q=${encodeURIComponent(term)}` : '/')
   }
 
   if (loading) return <WorkspaceLoading />
@@ -110,7 +106,7 @@ export function AppShell({ children, title, description, actions, topbar = 'even
           <Button variant="ghost" size="icon" type="button" className="sidebar-icon-btn sidebar-collapse" aria-pressed={collapsed} aria-label={collapsed ? 'Lebarkan menu' : 'Ciutkan menu'} onClick={toggleCollapsed}><Icon name="panel-left-close" /></Button>
         </div>
         <nav className="sidebar-nav" aria-label="Navigasi utama">
-          {NAVIGATION.map((link) => <Link key={link.href} href={link.href} className="nav-item" data-pill={link.pill || undefined} title={collapsed ? link.label : undefined} aria-current={link.match(pathname) ? 'page' : undefined}>
+          {NAVIGATION.map((link) => <Link key={link.href} href={link.href} className="nav-item" title={collapsed ? link.label : undefined} aria-current={link.match(pathname) ? 'page' : undefined}>
             <Icon name={link.icon} /><span className="nav-label">{link.label}</span>
           </Link>)}
         </nav>
@@ -121,7 +117,7 @@ export function AppShell({ children, title, description, actions, topbar = 'even
           </div>}
           <Button variant="ghost" type="button" className="role-card" aria-haspopup="menu" aria-expanded={accountOpen} onClick={() => setAccountOpen((v) => !v)}>
             <span className="role-avatar" aria-hidden="true">{initials(session.display_name)}</span>
-            <span className="role-text"><span className="role-name">{session.role_label}</span><span className="role-sub">Ruang kendali</span></span>
+            <span className="role-text"><span className="role-name" title={session.display_name}>{session.display_name}</span><span className="role-sub">{session.role_label}</span></span>
           </Button>
         </div>
       </aside>

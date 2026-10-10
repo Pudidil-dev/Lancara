@@ -17,7 +17,7 @@ export function diffSnapshots(base: Snapshot, proposed: Snapshot): ItemDiff[] {
     if (b.status !== p.status) changes.push('status')
     if (b.estimated_end_at !== p.estimated_end_at) changes.push('end_estimate')
     if (b.title !== p.title) changes.push('title')
-    if (JSON.stringify(b.pic_role_ids) !== JSON.stringify(p.pic_role_ids)) changes.push('pic')
+    if (JSON.stringify(b.pic_role_ids) !== JSON.stringify(p.pic_role_ids) || (b.pic_text ?? '') !== (p.pic_text ?? '')) changes.push('pic')
     if (JSON.stringify(b.resource_ids) !== JSON.stringify(p.resource_ids)) changes.push('resources')
     if (b.swappable !== p.swappable) changes.push('swappable')
     if (!changes.length) continue
@@ -25,7 +25,7 @@ export function diffSnapshots(base: Snapshot, proposed: Snapshot): ItemDiff[] {
     const roles = (ids: string[], snapshot: Snapshot) => ids.map(id => snapshot.roles.find(r => r.id === id)?.label ?? id).join(', ') || 'Tidak ada'
     const resources = (ids: string[], snapshot: Snapshot) => ids.map(id => snapshot.resources.find(r => r.id === id)?.label ?? id).join(', ') || 'Tidak ada'
     if (changes.includes('title')) details.push({ field: 'Judul', old: b.title, new: p.title })
-    if (changes.includes('pic')) details.push({ field: 'PIC', old: roles(b.pic_role_ids, base), new: roles(p.pic_role_ids, proposed) })
+    if (changes.includes('pic')) details.push({ field: 'PIC', old: b.pic_text || roles(b.pic_role_ids, base), new: p.pic_text || roles(p.pic_role_ids, proposed) })
     if (changes.includes('resources')) details.push({ field: 'Resource', old: resources(b.resource_ids, base), new: resources(p.resource_ids, proposed) })
     if (changes.includes('swappable')) details.push({ field: 'Fleksibel', old: b.swappable ? 'Ya' : 'Tidak', new: p.swappable ? 'Ya' : 'Tidak' })
     out.push({

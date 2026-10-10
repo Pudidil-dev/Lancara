@@ -12,6 +12,7 @@ export function roleNames(ids: string[], snapshot: Snapshot): string[] {
 
 /** Figma menyingkat PIC ("Stage / Audio"): buang awalan "PIC " dan gabung dengan " / ". */
 export function picLabel(item: Item, snapshot: Snapshot): string {
+  if (item.pic_text) return item.pic_text
   const names = roleNames(item.pic_role_ids, snapshot).map((n) => n.replace(/^PIC\s+/i, ''))
   return names.length ? names.join(' / ') : 'PIC belum diisi'
 }

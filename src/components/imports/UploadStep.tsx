@@ -23,7 +23,6 @@ type State = { kind: 'idle' } | { kind: 'loading'; name: string } | { kind: 'suc
 /** Langkah 2 "Unggah rundown dalam PDF" (Figma 60:2291) termasuk state loading/sukses (135:7964, 135:8053). */
 export function UploadStep({ settings, record, onUploaded }: { settings: ImportSettings; record: ImportRecord | null; onUploaded: (record: ImportRecord) => void }) {
   const { eventId } = useEvent()
-  const [pages, setPages] = useState('')
   const [drag, setDrag] = useState(false)
   const [state, setState] = useState<State>(record ? { kind: 'success', record } : { kind: 'idle' })
   const input = useRef<HTMLInputElement>(null)
@@ -34,7 +33,7 @@ export function UploadStep({ settings, record, onUploaded }: { settings: ImportS
     if (file.size > MAX_BYTES) return setState({ kind: 'error', message: 'Ukuran berkas melebihi 4 MB.' })
     setState({ kind: 'loading', name: file.name })
     try {
-      const created = await uploadPdf(eventId, file, pages, settings)
+      const created = await uploadPdf(eventId, file, '', settings)
       setState({ kind: 'success', record: created })
       onUploaded(created)
     } catch (error) {
@@ -73,20 +72,6 @@ export function UploadStep({ settings, record, onUploaded }: { settings: ImportS
           <Input ref={input} type="file" accept="application/pdf,.pdf" hidden onChange={(e) => void handle(e.target.files?.[0])} />
         </div>
         {state.kind === 'error' && <p className="lc-alert" role="alert">{state.message}</p>}
-        <div className="extract-config">
-          <div className="extract-config-head">
-            <div>
-              <Label htmlFor="pdf-pages">Halaman yang dibaca <span>(Opsional)</span></Label>
-              <p className="lc-small">Gunakan jika dokumen mencakup lampiran, cover tebal, atau banyak sesi panggung sekaligus.</p>
-            </div>
-            <span className="lc-help" title="Contoh: 2-5 untuk membaca halaman 2 sampai 5, atau 1,3 untuk halaman 1 dan 3. Kosong = semua halaman (maks 40)."><Icon name="help-circle" /></span>
-          </div>
-          <div className="extract-config-row">
-            <Input id="pdf-pages" value={pages} maxLength={60} disabled={state.kind === 'loading'} onChange={(e) => setPages(e.target.value)} placeholder="Semua halaman (misal: 1-4, atau tinggalkan kosong)" />
-            <Button variant="default" type="button" className="btn-gradient" disabled={state.kind === 'loading'} onClick={() => setPages('')}>Reset ke default</Button>
-          </div>
-          <p className="lc-info lc-small"><Icon name="info" size={14} />Sistem akan mengidentifikasi baris tabel waktu (WIB), nama segmen, penanggung jawab (PIC), dan catatan multimedia secara granular.{done && pages && ' Pilih ulang file untuk membaca halaman baru.'}</p>
-        </div>
         <div className="privacy-note">
           <Icon name="shield" size={18} />
           <div><strong>Privasi &amp; Isolasi Dokumen Operasional</strong><p className="lc-small">Dokumen rundown diproses dalam sandbox terisolasi. Tidak ada data yang dibagikan atau digunakan untuk pelatihan publik. Berkas tidak disimpan; hanya hasil baca yang disimpan sampai Anda mengaktifkannya.</p></div>

@@ -169,7 +169,7 @@ export function ChangeDetailScreen({ id, initialParseError }: { id: string; init
       </>}
       {data.decision && !approved && <section className="alert alert-success"><h2>✓ Disetujui sebagai v{data.decision.new_version}</h2><p>{data.decision.approved_by} · {formatClock(data.decision.approved_at, data.event.timezone, data.server_now)} {zoneAbbrev(data.event.timezone)}</p><p>Alasan: {data.decision.reason}</p>{authenticated && <Link href="/history">Lihat Riwayat</Link>}</section>}
       {data.change.status === 'rejected' && <section className="alert alert-blocker"><h2>! Kabar ditolak</h2><p>{data.change.reject_reason}</p></section>}
-      <div className="row"><Button asChild variant="outline"><Link href="/rundown" className="btn">Kirim kabar lain lewat AI</Link></Button><Button asChild variant="outline"><Link href="/rundown" className="btn">Lihat rundown aktif</Link></Button></div>
+      <div className="row"><Button asChild variant="outline"><Link href="/" className="btn">Kirim kabar lain lewat AI</Link></Button><Button asChild variant="outline"><Link href="/" className="btn">Lihat rundown aktif</Link></Button></div>
     </div>}
     <Dialog open={modal === 'approve'} title="Setujui perubahan rundown" busy={unresolved} onClose={() => { if (!unresolved) setModal(null) }}>
       <form className="stack" onSubmit={event => { event.preventDefault(); if (!uncertain) void sendApproval() }}>

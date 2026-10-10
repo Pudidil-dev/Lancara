@@ -50,7 +50,7 @@ export function reminderNotifications(snapshot: Snapshot, eventNowIso: string, r
         title: `${clip(item.title, 80)} segera dimulai`,
         description: `Segmen dimulai pukul ${hhmm(item.start_at, tz)}. Pastikan PIC dan perlengkapan siap.`,
         at: new Date(realNowMs - Math.max(0, now - firedAt)).toISOString(),
-        href: '/rundown',
+        href: '/',
       }
     })
 }

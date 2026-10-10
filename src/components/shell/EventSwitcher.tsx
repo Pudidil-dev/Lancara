@@ -44,7 +44,7 @@ export function EventSwitcher({ eventId, eventName }: { eventId: string; eventNa
     try {
       await selection.mutate({ path: '/api/session/event', method: 'PUT', body: { event_id: option.id } })
       // Dokumen baru membuang cache, draft impor, dan konteks percakapan event sebelumnya.
-      window.location.assign('/rundown')
+      window.location.assign(window.location.pathname === '/rundown' ? '/rundown' : '/')
     } catch { setSwitchingTo(null) }
   }
   function keys(event: KeyboardEvent<HTMLInputElement>) {

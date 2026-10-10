@@ -1,14 +1,8 @@
-'use client'
-import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
-import { usePolling } from '@/hooks/usePolling'
-import type { SessionResponse } from '@/hooks/types'
-import { ErrorState } from '@/components/ui'
-import { WorkspaceLoading } from '@/components/shell/WorkspaceLoading'
-export default function Home() {
-  const query = usePolling<SessionResponse>('/api/session')
-  const router = useRouter()
-  useEffect(() => { if (query.data) router.replace(!query.data.session ? '/login' : '/rundown') }, [query.data, router])
-  if (query.error && !query.data) return <main className="container ui-error-page"><ErrorState error={query.error} onRetry={() => void query.refresh()} /></main>
-  return <WorkspaceLoading />
-}
+import { Suspense } from 'react'
+import { AppShell } from '@/components/shell/AppShell'
+import { RundownScreen } from '@/components/rundown/RundownScreen'
+import { Loading } from '@/components/ui'
+
+// Dashboard = halaman utama "/". Judul = nama acara aktif (Figma Dashboard); ?q= dari kolom pencarian memfilter segmen.
+// Tanpa sesi, AppShell (useSession) mengarahkan ke /login.
+export default function Dashboard() { return <AppShell><Suspense fallback={<Loading label="Memuat rundown…" />}><RundownScreen /></Suspense></AppShell> }

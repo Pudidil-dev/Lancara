@@ -5,6 +5,7 @@ import { useOnline } from '@/hooks/useOnline'
 import type { ApiError } from '@/lib/api-client'
 import { BREAK_PATTERN } from '@/modules/engine/schedule'
 import type { RoleRef } from '@/modules/engine/types'
+import { splitPic } from '@/modules/events/pic'
 import type { ImportRecord, ImportRow } from '@/modules/imports/types'
 
 const COLLAPSED_ROWS = 6
@@ -23,7 +24,7 @@ function subtitle(row: ImportRow): string {
 }
 
 function RowEditor({ row, roles, busy, error, onSave, onDelete, onCancel, onClearError }: { row: ImportRow; roles: RoleRef[]; busy: boolean; error: ApiError | null; onSave: (row: ImportRow) => void; onDelete: () => void; onCancel: () => void; onClearError: () => void }) {
-  const [draft, setDraft] = useState({ title: row.title, segment: row.segment ?? '', start: row.start_hhmm, duration: String(row.duration_min), pic: row.pic_role_ids, equipment: row.equipment.join('\n'), notes: row.notes.join('\n'), fixed: row.fixed_start })
+  const [draft, setDraft] = useState({ title: row.title, segment: row.segment ?? '', start: row.start_hhmm, duration: String(row.duration_min), pic: row.pic_names.join(', '), equipment: row.equipment.join('\n'), notes: row.notes.join('\n'), fixed: row.fixed_start })
   const [confirmDelete, setConfirmDelete] = useState(false)
   const online = useOnline()
   const id = `row-${row.row_no}`
@@ -32,7 +33,7 @@ function RowEditor({ row, roles, busy, error, onSave, onDelete, onCancel, onClea
   function submit(event: FormEvent) {
     event.preventDefault()
     if (busy || !online || !valid || confirmDelete) return
-    onSave({ ...row, title: draft.title.trim().slice(0, 120), segment: draft.segment.trim().slice(0, 80) || null, start_hhmm: draft.start, duration_min: duration, pic_role_ids: draft.pic, equipment: lines(draft.equipment), notes: lines(draft.notes), fixed_start: draft.fixed })
+    onSave({ ...row, title: draft.title.trim().slice(0, 120), segment: draft.segment.trim().slice(0, 80) || null, start_hhmm: draft.start, duration_min: duration, pic_names: splitPic(draft.pic), equipment: lines(draft.equipment), notes: lines(draft.notes), fixed_start: draft.fixed })
   }
   return (
     <form className="review-editor" onSubmit={submit} aria-label={`Lengkapi ${row.title}`}>
@@ -48,10 +49,7 @@ function RowEditor({ row, roles, busy, error, onSave, onDelete, onCancel, onClea
         <div className="field"><Label htmlFor={`${id}-dur`}>Durasi (menit)</Label><Input id={`${id}-dur`} type="number" min={1} max={1440} value={draft.duration} required onChange={(e) => setDraft({ ...draft, duration: e.target.value })} /></div>
       </div>
       <div className="field"><Label htmlFor={`${id}-seg`}>Tipe segmen</Label><Input id={`${id}-seg`} value={draft.segment} maxLength={80} placeholder="Main stage, Performance, Diskusi…" onChange={(e) => setDraft({ ...draft, segment: e.target.value })} /></div>
-      <fieldset className="role-chips">
-        <legend>PIC {row.pic_names.length > 0 && <span className="muted">(tertulis: {row.pic_names.join(', ')})</span>}</legend>
-        {roles.map((r) => <Label key={r.id}><Input type="checkbox" checked={draft.pic.includes(r.id)} onChange={(e) => setDraft({ ...draft, pic: e.target.checked ? [...draft.pic, r.id] : draft.pic.filter((x) => x !== r.id) })} />{r.label}</Label>)}
-      </fieldset>
+      <div className="field"><Label htmlFor={`${id}-pic`}>PIC</Label><Input id={`${id}-pic`} value={draft.pic} maxLength={200} placeholder="Tulis bebas, mis. Sidiq, Audio" onChange={(e) => setDraft({ ...draft, pic: e.target.value })} /></div>
       <div className="review-editor-grid">
         <div className="field"><Label htmlFor={`${id}-eq`}>Perlengkapan (satu per baris)</Label><Textarea id={`${id}-eq`} value={draft.equipment} onChange={(e) => setDraft({ ...draft, equipment: e.target.value })} /></div>
         <div className="field review-editor-notes"><Label htmlFor={`${id}-notes`}>Teknis (satu per baris)</Label><Textarea id={`${id}-notes`} value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} /></div>
@@ -104,7 +102,6 @@ export function ReviewStep({ record, eventName, roles, saving, saveError, onClea
       <section className="review-table" aria-labelledby="review-title">
         <div className="review-heading">
           <h2 id="review-title">#1 | {record.settings.name || eventName}</h2>
-          {rows.length > COLLAPSED_ROWS && <Button variant="ghost" type="button" className="review-toggle" aria-expanded={expanded} aria-label={expanded ? 'Ringkas tabel' : 'Tampilkan semua item'} onClick={() => setExpanded((v) => !v)}><Icon name="chevrons-down-up" /></Button>}
           <span className="review-count">{shown.length} dari {rows.length} item</span>
         </div>
         <p className="review-small" style={{ padding: '0 20px 12px', margin: 0 }}>
@@ -135,6 +132,9 @@ export function ReviewStep({ record, eventName, roles, saving, saveError, onClea
             </li>
           })}
         </ul>
+        {rows.length > COLLAPSED_ROWS && <Button variant="ghost" type="button" className="review-toggle" aria-expanded={expanded} onClick={() => setExpanded((v) => !v)}>
+          <Icon name={expanded ? 'chevrons-down-up' : 'chevron-down'} />{expanded ? 'Ringkas tabel' : `Tampilkan semua ${rows.length} item`}
+        </Button>}
       </section>
       {editingRow && !applied && <Dialog open title={`Lengkapi ${editingRow.title}`} className="review-editor-dialog" busy={saving} onClose={closeEditor}>
         <RowEditor key={`${record.id}-${editingRow.row_no}`} row={editingRow} roles={roles} busy={saving} error={saveError} onClearError={onClearError} onCancel={closeEditor}

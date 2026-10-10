@@ -19,6 +19,8 @@ export interface Item {
   swappable: boolean
   /** Info operasional dari impor PDF (tidak dipakai engine): tipe/lokasi segmen, perlengkapan, catatan teknis. */
   segment?: string | null
+  /** PIC teks bebas (nama apa adanya); pic_role_ids tetap dipakai engine/brief. */
+  pic_text?: string
   /** Pihak yang terlibat (Figma kolom "PIHAK YANG TERLIBAT"). */
   involved?: string[]
   equipment?: string[]

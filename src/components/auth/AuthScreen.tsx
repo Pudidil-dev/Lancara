@@ -22,6 +22,7 @@ export function AuthScreen({ mode }: { mode: Mode }) {
   const router = useRouter()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState('')
 
@@ -33,7 +34,7 @@ export function AuthScreen({ mode }: { mode: Mode }) {
     try {
       await api(copy.path, { method: 'POST', body: { username, password } })
       resetQueries()
-      router.replace('/rundown')
+      router.replace('/')
     } catch (e) {
       setError(e instanceof ApiError && e.code === 'UNAUTHENTICATED' ? 'Username atau password belum sesuai. Periksa kembali lalu coba lagi.' : userErrorMessage(e, 'read'))
       setPending(false)
@@ -51,7 +52,8 @@ export function AuthScreen({ mode }: { mode: Mode }) {
         <form className="auth-form" onSubmit={submit}>
           <div className="auth-heading"><h1>{copy.title}</h1><p>{copy.subtitle}</p></div>
           <div className="auth-field"><Label htmlFor="auth-username">Username</Label><Input id="auth-username" name="username" autoComplete="username" autoFocus required disabled={pending} aria-invalid={!!error || undefined} aria-describedby={error ? 'auth-error' : undefined} value={username} onChange={(e) => { setUsername(e.target.value); setError('') }} /></div>
-          <div className="auth-field"><Label htmlFor="auth-password">Password</Label><Input id="auth-password" name="password" type="password" required disabled={pending} aria-invalid={!!error || undefined} aria-describedby={error ? 'auth-error' : undefined} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} value={password} onChange={(e) => { setPassword(e.target.value); setError('') }} /></div>
+          <div className="auth-field"><Label htmlFor="auth-password">Password</Label><Input id="auth-password" name="password" type={showPassword ? 'text' : 'password'} required disabled={pending} aria-invalid={!!error || undefined} aria-describedby={error ? 'auth-error' : undefined} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} value={password} onChange={(e) => { setPassword(e.target.value); setError('') }} /></div>
+          <label className="auth-show"><input type="checkbox" checked={showPassword} onChange={(e) => setShowPassword(e.target.checked)} />Tampilkan password</label>
           {error && <p id="auth-error" className="lc-alert" role="alert">{error}</p>}
           <Button variant="default" type="submit" className="btn-gradient auth-submit" loading={pending}>{pending ? copy.busy : copy.button}</Button>
           <p className="auth-switch">{copy.switchText} <Link href={copy.switchHref}>{copy.switchLink}</Link></p>

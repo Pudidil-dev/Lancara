@@ -12,7 +12,7 @@ import { validateSnapshot } from '@/modules/engine/validate'
 import { getEvent, getSnapshot, saveSetup } from '@/modules/events/service'
 import { aiExtractRows, ImportAiUnavailableError } from './ai-extract'
 import { manualToRaw } from './manual'
-import { buildSnapshot, normalizeRows } from './normalize'
+import { buildSnapshot, matchRole, normalizeRows } from './normalize'
 import { readPdf } from './pdf'
 import { ruleExtractRows } from './rule-extract'
 import {
@@ -138,7 +138,7 @@ export async function getImport(session: Session, eventId: string, importId: str
 function reflag(row: ImportRow, previous: ImportRow | undefined): ImportRow {
   const keep = row.flags.filter((f) => !['PIC_UNKNOWN', 'PIC_MISSING', 'DURATION_GUESSED'].includes(f.code))
   const flags: ImportFlag[] = [...keep]
-  if (!row.pic_role_ids.length) flags.push(row.pic_names.length ? { level: 'warn', code: 'PIC_UNKNOWN', message: `PIC tidak dikenali: ${row.pic_names.join(', ')}.` } : { level: 'warn', code: 'PIC_MISSING', message: 'PIC belum tertulis.' })
+  if (!row.pic_role_ids.length) flags.push(row.pic_names.length ? { level: 'warn', code: 'PIC_UNKNOWN', message: `PIC ${row.pic_names.join(', ')} ditulis bebas; peran sistem memakai default Koordinator.` } : { level: 'warn', code: 'PIC_MISSING', message: 'PIC belum tertulis.' })
   const guessed = previous?.flags.find((f) => f.code === 'DURATION_GUESSED')
   if (guessed && previous?.duration_min === row.duration_min) flags.push(guessed)
   return { ...row, flags }
@@ -152,15 +152,20 @@ export async function updateImportRows(session: Session, eventId: string, import
   const current = await loadImport(eventId, importId)
   if (current.status !== 'draft') throw new AppError('INVALID_STATE', 'Impor ini sudah diaktifkan atau dibuang.')
   const event = await getEvent(eventId)
-  const roles = new Set((await getSnapshot(eventId, event.active_version)).roles.map((r) => r.id))
-  const rows = parsed.data.map((row, i) => reflag({ ...row, row_no: i + 1, pic_role_ids: row.pic_role_ids.filter((id) => roles.has(id)) }, current.draft.rows[i]))
+  const roleList = (await getSnapshot(eventId, event.active_version)).roles
+  const roles = new Set(roleList.map((r) => r.id))
+  // PIC teks bebas: peran sistem diturunkan dari nama yang ditulis.
+  const picRoles = (row: ImportRow) => row.pic_names.length
+    ? [...new Set(row.pic_names.flatMap((name) => { const id = matchRole(name, roleList); return id ? [id] : [] }))]
+    : row.pic_role_ids.filter((id) => roles.has(id))
+  const rows = parsed.data.map((row, i) => reflag({ ...row, row_no: i + 1, pic_role_ids: picRoles(row) }, current.draft.rows[i]))
   const settings = input.settings === undefined ? current.settings : parseSettings(input.settings)
   const draft: ImportDraft = { ...current.draft, rows }
   await query(`UPDATE rundown_imports SET draft = $3, settings = $4, row_count = $5, updated_at = now() WHERE id = $1 AND event_id = $2 AND status = 'draft'`, [importId, eventId, JSON.stringify(draft), JSON.stringify(settings), rows.length])
   return { ...current, settings, draft }
 }
 
-/** Aktivasi: snapshot baru lewat saveSetup (idempoten, cek base_version, validasi engine), lalu impor ditandai applied. */
+/** Aktivasi: data impor MENIMPA rundown aktif (item lama diganti seluruhnya) di atas versi terbaru, tanpa konflik versi; idempoten dan divalidasi engine. */
 export async function applyImport(session: Session, eventId: string, importId: string, input: { base_version: number; idempotency_key: string }) {
   requireEvent(session, eventId)
   requireCoordinator(session)
@@ -174,7 +179,7 @@ export async function applyImport(session: Session, eventId: string, importId: s
   const snapshot = buildSnapshot(record.draft.rows, record.settings, base, localDate(anchor, base.event.timezone))
   const { errors } = validateSnapshot(snapshot)
   if (errors.length) throw new AppError('VALIDATION_ERROR', 'Rundown belum bisa diaktifkan: perbaiki data berikut.', errors)
-  const result = await saveSetup(session, eventId, { base_version: input.base_version, snapshot, idempotency_key: input.idempotency_key, origin: 'import', import_filename: record.draft.source.filename, note: (record.draft.parser === 'manual' ? 'Isian manual (Tambah Rundown)' : `Impor PDF ${record.draft.source.filename}`).slice(0, 200) })
+  const result = await saveSetup(session, eventId, { base_version: event.active_version, snapshot, idempotency_key: input.idempotency_key, origin: 'import', import_filename: record.draft.source.filename, note: (record.draft.parser === 'manual' ? 'Isian manual (Tambah Rundown)' : `Impor PDF ${record.draft.source.filename}`).slice(0, 200) })
   await query(`UPDATE rundown_imports SET status = 'applied', applied_version = $3, updated_at = now() WHERE id = $1 AND event_id = $2 AND status = 'draft'`, [importId, eventId, result.new_version])
   log('info', 'import_applied', { import_id: importId, version: result.new_version, items: snapshot.items.length })
   return { new_version: result.new_version, import_id: importId, replayed: result.replayed }

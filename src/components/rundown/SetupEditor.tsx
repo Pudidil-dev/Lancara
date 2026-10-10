@@ -1,4 +1,5 @@
 'use client'
+import { resolvePic } from '@/modules/events/pic'
 import Link from 'next/link'
 import { useMemo, useState, type ReactNode } from 'react'
 import { PageActions, PageDescription } from '@/components/shell/PageHeader'
@@ -95,7 +96,7 @@ function SetupEditor({ data }: { data: RundownResponse }) {
   return <form id="setup-form" className="setup-columns" onSubmit={e => { e.preventDefault(); void save() }}>
     <PageDescription>Lengkapi data operasional sebelum acara dimulai. Semua waktu dalam {zoneAbbrev(zone)}.</PageDescription>
     <PageActions>
-      <Button asChild variant="outline"><Link className="btn" href="/rundown">Kembali ke rundown</Link></Button>
+      <Button asChild variant="outline"><Link className="btn" href="/">Kembali ke dashboard</Link></Button>
       <Button variant="default" type="submit" form="setup-form" className="btn btn-primary" disabled={disabled || stale}>{mutation.pending ? 'Menyimpan setup…' : 'Simpan perubahan'}</Button>
     </PageActions>
 
@@ -115,7 +116,7 @@ function SetupEditor({ data }: { data: RundownResponse }) {
           <div className="field"><span className="label-text">Penjadwalan</span><Label className="check-label" htmlFor={`swap-${item.id}`}><Input id={`swap-${item.id}`} type="checkbox" checked={item.swappable} disabled={locked(item)} onChange={e => updateItem(item.id, { swappable: e.target.checked })} />Boleh ditukar</Label></div>
         </div>
         <hr className="divider" />
-        <fieldset className={styles.fieldset}><legend>PIC dan peran terkait</legend>{roleChecks(item.pic_role_ids, next => updateItem(item.id, { pic_role_ids: next }), `pic-${item.id}`)}{fieldError('pic_role_ids', item.id, index)}</fieldset>
+        {field(`pic-${item.id}`, 'PIC (tulis bebas)', <Input id={`pic-${item.id}`} maxLength={200} value={item.pic_text ?? item.pic_role_ids.map(id => draft.roles.find(r => r.id === id)?.label ?? id).join(', ')} placeholder="Mis. Sidiq, Audio" aria-describedby={`err-${item.id}-pic_role_ids`} onChange={e => updateItem(item.id, resolvePic(e.target.value, draft.roles))} />, fieldError('pic_role_ids', item.id, index))}
         <fieldset className={styles.fieldset}><legend>Resource</legend><div className={styles.checks}>{draft.resources.map(resource => <Label key={resource.id} className="check-label"><Input type="checkbox" checked={item.resource_ids.includes(resource.id)} onChange={e => updateItem(item.id, { resource_ids: e.target.checked ? [...item.resource_ids, resource.id] : item.resource_ids.filter(id => id !== resource.id) })} />{resource.label}</Label>)}</div>{fieldError('resource_ids', item.id, index)}</fieldset>
         <div><h3 className="label-text">Dependensi</h3>{itemDeps.length ? itemDeps.map(d => <p key={d.id} className="muted">{itemTitle(d.predecessor_id)} harus selesai sebelum {itemTitle(d.successor_id)} dimulai. ({d.id})</p>) : <p className="muted">Tidak ada dependensi untuk item ini. Atur di kartu Dependensi aktivitas.</p>}</div>
         <fieldset className={`${styles.fieldset} stack`}><legend>Batas {item.title}</legend>{draft.constraints.filter(c => c.item_id === item.id).map(c => <div className="stack" key={c.id}><p className="muted">{c.id}</p><div className="field-pair">

@@ -1,7 +1,7 @@
-import { Suspense } from 'react'
 import { AppShell } from '@/components/shell/AppShell'
-import { RundownScreen } from '@/components/rundown/RundownScreen'
-import { Loading } from '@/components/ui'
+import { RundownList } from '@/components/rundown/RundownList'
 
-// Judul = nama acara aktif (Figma Dashboard); ?q= dari kolom pencarian memfilter segmen.
-export default function Rundown() { return <AppShell><Suspense fallback={<Loading label="Memuat rundown…" />}><RundownScreen /></Suspense></AppShell> }
+// Daftar seluruh rundown akun: berlangsung, akan datang, dan selesai.
+export default function Rundowns() {
+  return <AppShell title="Daftar Rundown" description="Semua rundown acara Anda, termasuk yang sedang berlangsung, akan datang, dan sudah selesai."><RundownList /></AppShell>
+}

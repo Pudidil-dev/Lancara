@@ -63,7 +63,7 @@ async function acknowledgements(eventId: string): Promise<Source[]> {
       title: `${role} mengonfirmasi kesiapan`,
       description: `Brief Rundown v${r.version} sudah dibaca. ${role} siap untuk segmen berikutnya.`,
       at: iso(r.acknowledged_at),
-      href: '/inbox',
+      href: '/history',
     }
   })
 }
@@ -94,7 +94,7 @@ async function rundownActivity(eventId: string): Promise<Source[]> {
       title: 'Tautan publik rundown dibuat',
       description: 'Siapa pun yang memegang tautan dapat melihat rundown aktif tanpa login.',
       at: iso(s.created_at),
-      href: '/rundown',
+      href: '/',
     })),
   ]
 }

@@ -79,7 +79,7 @@ export function normalizeRows(raw: RawRow[], roles: RoleRef[]): { rows: ImportRo
     const matchedIds = [...new Set(mapped.flatMap(m => m.role ? [m.role] : []))].slice(0, 10)
     const fallback = !matchedIds.length ? defaultPicRole(roles) : undefined
     if (!row.pic.length) flags.push({ level: 'warn', code: 'PIC_MISSING', message: fallback ? `PIC belum tertulis; diisi default ${fallback.label}. Periksa penanggung jawabnya.` : 'PIC belum tertulis.' })
-    if (unknown.length) flags.push({ level: 'warn', code: 'PIC_UNKNOWN', message: `PIC tidak dikenali: ${unknown.join(', ')}.` })
+    if (unknown.length) flags.push({ level: 'warn', code: 'PIC_UNKNOWN', message: `PIC ${unknown.join(', ')} ditulis bebas; peran sistem memakai default Koordinator.` })
     const title = row.title.replace(/\s+/g, ' ').trim()
     if (title.length > 120) flags.push({ level: 'warn', code: 'TITLE_TRUNCATED', message: 'Judul dipotong 120 karakter.' })
     return {
@@ -137,6 +137,7 @@ export function buildSnapshot(rows: ImportRow[], settings: ImportSettings, base:
     resource_ids: [],
     swappable: !row.fixed_start && !BREAK_PATTERN.test(row.title),
     segment: row.segment,
+    pic_text: row.pic_names.length ? row.pic_names.join(', ').slice(0, 200) : undefined,
     involved: row.involved,
     equipment: row.equipment,
     notes: row.notes,

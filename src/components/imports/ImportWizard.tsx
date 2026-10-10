@@ -146,7 +146,7 @@ export function ImportWizard() {
       const result = await activation.mutate<{ new_version: number }>({ path: `/api/events/${EVENT_ID}/imports/${record.id}/apply`, body: { base_version: rundown.data.version }, timeoutMs: 30000 })
       setActivated(result.new_version)
       try { sessionStorage.removeItem(`${STORAGE_KEY}.${EVENT_ID}`) } catch { /* Opsional. */ }
-      setTimeout(() => router.push('/rundown'), 1600)
+      setTimeout(() => router.push('/'), 1600)
     } catch { /* Error ditampilkan di atas bilah. */ }
   }
 
@@ -192,9 +192,19 @@ export function ImportWizard() {
         {!record && !loadError && <Loading label="Memuat data rundown…" />}
         {record && <ReviewStep record={record} eventName={rundown.data.event.name} roles={rundown.data.snapshot.roles} saving={savingRows} saveError={rowError} onClearError={() => setRowError(null)} onSaveRows={saveRows} />}
         {activation.error && <ErrorState error={activation.error} />}
-        {record?.status === 'applied' && !activated && <p className="lc-alert" data-tone="warning">Impor ini sudah diaktifkan sebagai Rundown v{record.applied_version}. <Link href="/rundown">Buka dashboard</Link></p>}
+        {record?.status === 'applied' && !activated && <p className="lc-alert" data-tone="warning">Impor ini sudah diaktifkan sebagai Rundown v{record.applied_version}. <Link href="/">Buka dashboard</Link></p>}
         <WizardBar onBack={() => go('choose')} primary={<Button variant="default" type="button" className="btn-gradient" disabled={!record || record.status !== 'draft' || activation.pending || savingRows || !online} onClick={() => void activate()}>{activation.pending ? 'Mengaktifkan…' : 'Aktifkan'}<Icon name="arrow-right" /></Button>} />
       </>}
+
+      {activation.pending && !activated && <div className="lc-overlay" role="alertdialog" aria-modal="true" aria-labelledby="activating-title" aria-busy="true">
+        <div className="state-card">
+          <div className="dropzone" data-state="loading">
+            <div className="dropzone-icon"><Icon name="spinner" size={54} /></div>
+            <h3 id="activating-title" role="status">Mengaktifkan rundown…</h3>
+            <p>Data lama diganti dengan data baru. Jangan tutup halaman ini.</p>
+          </div>
+        </div>
+      </div>}
 
       {activated && <div className="lc-overlay" role="dialog" aria-modal="true" aria-labelledby="activated-title">
         <div className="state-card">

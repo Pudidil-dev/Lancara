@@ -88,7 +88,7 @@ export const TOOL_SPECS: ToolSpec[] = [
   },
   {
     name: 'edit_rundown',
-    description: 'API CRUD rundown: membuat sesi, mengubah judul/jam/durasi/PIC/resource sesi pending, membatalkan melalui delete, atau reorder dengan item_ids semua sesi pending untuk menghitung ulang urutan/jam. Rencana persis divalidasi engine dan disimpan sebagai bubble preview. Pakai base_version aktif. Database aktif dan brief hanya berubah setelah dialog konfirmasi koordinator.',
+    description: 'API CRUD rundown: membuat sesi, mengubah judul/jam/durasi/PIC (teks bebas lewat field pic)/resource sesi pending, membatalkan melalui delete, atau reorder dengan item_ids semua sesi pending untuk menghitung ulang urutan/jam. Rencana persis divalidasi engine dan disimpan sebagai bubble preview. Pakai base_version aktif. Database aktif dan brief hanya berubah setelah dialog konfirmasi koordinator.',
     parameters: z.toJSONSchema(EditRundownInputSchema),
   },
   {
@@ -202,7 +202,7 @@ async function summary(session: Session): Promise<ToolOutcome> {
     swappable: item.swappable,
     fixed_start: snapshot.constraints.some((c) => c.item_id === item.id && c.type === 'fixed_start'),
     protected: isBreak(item, snapshot),
-    pic: item.pic_role_ids.map((id) => snapshot.roles.find((r) => r.id === id)?.label ?? id),
+    pic: item.pic_text ? item.pic_text.split(/\s*,\s*/) : item.pic_role_ids.map((id) => snapshot.roles.find((r) => r.id === id)?.label ?? id),
   }))
   return {
     ok: true,

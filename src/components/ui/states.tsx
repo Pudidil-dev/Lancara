@@ -19,7 +19,7 @@ export function ErrorState({ error, onRetry }: { error: ApiError; onRetry?: () =
       {(onRetry && feedback.retryable || error.code === 'UNAUTHENTICATED' || error.code === 'NOT_FOUND') && <div className="ui-error-actions">
         {onRetry && feedback.retryable && <Button variant="outline" onClick={onRetry}><Icon name="history" />Coba lagi</Button>}
         {error.code === 'UNAUTHENTICATED' && <Button asChild><Link href="/login">Masuk kembali</Link></Button>}
-        {error.code === 'NOT_FOUND' && <Button variant="outline" asChild><Link href="/rundown">Kembali ke rundown</Link></Button>}
+        {error.code === 'NOT_FOUND' && <Button variant="outline" asChild><Link href="/">Kembali ke dashboard</Link></Button>}
       </div>}
     </div>
   </div>

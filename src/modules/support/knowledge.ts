@@ -22,7 +22,7 @@ const ENTRIES: Entry[] = [
   {
     keys: ['lapor', 'kabar', 'telat', 'terlambat', 'molor', 'batal', 'tukar', 'datang'],
     answer: () => 'Laporkan kabar perubahan lewat panel Lancara Support di Dashboard, misalnya "Talent B baru bisa mulai jam 20.05". Sistem menafsirkan kabar itu dulu; tafsiran harus dikonfirmasi sebelum opsi dihitung. Rundown aktif belum berubah sampai koordinator menyetujui opsi.',
-    suggestions: () => [{ label: 'Dashboard', href: '/rundown' }],
+    suggestions: () => [{ label: 'Dashboard', href: '/' }],
   },
   {
     keys: ['setuju', 'approve', 'persetujuan', 'menyetujui', 'disetujui'],
@@ -37,12 +37,12 @@ const ENTRIES: Entry[] = [
   {
     keys: ['terkunci', 'berlangsung', 'status', 'selesai'],
     answer: () => 'Item yang sedang berlangsung atau sudah selesai terkunci: jam mulainya tidak dipindahkan otomatis. Koordinator dapat membuka segmen di Dashboard lalu menandai mulai atau selesai.',
-    suggestions: () => [{ label: 'Dashboard', href: '/rundown' }],
+    suggestions: () => [{ label: 'Dashboard', href: '/' }],
   },
   {
     keys: ['brief', 'inbox', 'sudah dibaca', 'dibaca', 'konfirmasi'],
-    answer: () => 'Seluruh brief acara muncul di Perubahan Langsung. Tekan "Sudah dibaca" setelah membacanya. Itu hanya tanda sudah membaca, bukan tanda bahwa aksi di lapangan sudah dilakukan.',
-    suggestions: () => [{ label: 'Perubahan Langsung', href: '/inbox' }],
+    answer: () => 'Brief perubahan dan status bacanya per peran dapat dilihat di Riwayat. Status dibaca hanya tanda sudah membaca, bukan tanda bahwa aksi di lapangan sudah dilakukan.',
+    suggestions: () => [{ label: 'Riwayat', href: '/history' }],
   },
   {
     keys: ['riwayat', 'versi', 'history', 'keputusan'],
@@ -52,7 +52,7 @@ const ENTRIES: Entry[] = [
   {
     keys: ['jam simulasi', 'simulasi', 'reset', 'demo'],
     answer: () => 'Jam simulasi dipakai untuk demo acara dan diatur saat data demo disiapkan; Dashboard memakainya untuk segmen yang sedang berlangsung dan sisa waktu.',
-    suggestions: () => [{ label: 'Dashboard', href: '/rundown' }],
+    suggestions: () => [{ label: 'Dashboard', href: '/' }],
   },
   {
     keys: ['login', 'masuk', 'akun', 'peran', 'keluar', 'logout'],

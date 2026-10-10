@@ -4,19 +4,27 @@ import { formatClock, toMs } from '@/lib/time'
 import { analyze } from '@/modules/engine/analyze'
 import { endMs, isActive, isBreakItem, sortByStart } from '@/modules/engine/schedule'
 import type { Candidate, Item, Snapshot } from '@/modules/engine/types'
+import { resolvePic } from '@/modules/events/pic'
 import { resolveEventClock } from './time'
+
+function createPic(base: Snapshot, op: { pic?: string; pic_role_ids?: string[] }): Pick<Item, 'pic_role_ids' | 'pic_text'> {
+  const resolved = resolvePic(op.pic ?? '', base.roles)
+  return { pic_text: resolved.pic_text, pic_role_ids: op.pic_role_ids ?? resolved.pic_role_ids }
+}
 
 const Id = z.string().min(1).max(64).regex(/^[a-zA-Z0-9_-]+$/)
 const Clock = z.string().regex(/^([01]?\d|2[0-3])[:.][0-5]\d$/)
+/** PIC teks bebas (mis. "Sidiq, Audio"); peran sistem dicocokkan otomatis. */
+const PicText = z.string().trim().min(1).max(200)
 const Minutes = z.number().int().min(1).max(720)
 const Create = z.object({
   op: z.literal('create'), id: Id, title: z.string().trim().min(1).max(120), start_hhmm: Clock,
-  duration_minutes: Minutes, min_duration_minutes: Minutes, pic_role_ids: z.array(Id).min(1).max(10),
+  duration_minutes: Minutes, min_duration_minutes: Minutes, pic: PicText.optional(), pic_role_ids: z.array(Id).min(1).max(10).optional(),
   resource_ids: z.array(Id).max(10), swappable: z.boolean(), after_item_id: Id.nullish(),
 }).strict()
 const Update = z.object({
   op: z.literal('update'), item_id: Id, start_hhmm: Clock.optional(), duration_minutes: Minutes.optional(),
-  title: z.string().trim().min(1).max(120).optional(), pic_role_ids: z.array(Id).min(1).max(10).optional(),
+  title: z.string().trim().min(1).max(120).optional(), pic: PicText.optional(), pic_role_ids: z.array(Id).min(1).max(10).optional(),
   resource_ids: z.array(Id).max(10).optional(), swappable: z.boolean().optional(),
 }).strict()
 const Delete = z.object({ op: z.literal('delete'), item_id: Id }).strict()
@@ -58,7 +66,7 @@ export function buildEditedRundown(base: Snapshot, input: EditRundownInput, now:
       const item: Item = {
         id: op.id, title: op.title, start_at: resolveEventClock(base, op.start_hhmm, after?.start_at ?? now),
         duration_seconds: op.duration_minutes * 60, min_duration_seconds: op.min_duration_minutes * 60,
-        status: 'pending', estimated_end_at: null, pic_role_ids: op.pic_role_ids, resource_ids: op.resource_ids, swappable: op.swappable,
+        status: 'pending', estimated_end_at: null, ...createPic(base, op), resource_ids: op.resource_ids, swappable: op.swappable,
       }
       const index = after ? proposed.items.indexOf(after) + 1 : proposed.items.length
       proposed.items.splice(index, 0, item)
@@ -76,7 +84,8 @@ export function buildEditedRundown(base: Snapshot, input: EditRundownInput, now:
     if (op.start_hhmm !== undefined) item.start_at = resolveEventClock(base, op.start_hhmm, item.start_at)
     if (op.duration_minutes !== undefined) item.duration_seconds = op.duration_minutes * 60
     if (op.title !== undefined) item.title = op.title
-    if (op.pic_role_ids !== undefined) item.pic_role_ids = op.pic_role_ids
+    if (op.pic !== undefined) Object.assign(item, resolvePic(op.pic, base.roles), op.pic_role_ids ? { pic_role_ids: op.pic_role_ids } : {})
+    else if (op.pic_role_ids !== undefined) { item.pic_role_ids = op.pic_role_ids; delete item.pic_text }
     if (op.resource_ids !== undefined) item.resource_ids = op.resource_ids
     if (op.swappable !== undefined) item.swappable = op.swappable
   }

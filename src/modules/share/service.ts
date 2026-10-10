@@ -94,7 +94,7 @@ export async function getPublicRundown(token: string): Promise<PublicRundown> {
         end_at: new Date(endMs(item)).toISOString(),
         duration_min: Math.round(item.duration_seconds / 60),
         segment: item.segment ?? null,
-        pic: item.pic_role_ids.map((id) => roles.get(id) ?? id),
+        pic: item.pic_text ? item.pic_text.split(/\s*,\s*/).filter(Boolean) : item.pic_role_ids.map((id) => roles.get(id) ?? id),
         status: item.status,
         locked: fixed.has(item.id) || isBreakItem(item),
       }))
