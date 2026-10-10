@@ -862,12 +862,6 @@ fieldset {
   font-weight: 500;
   line-height: 20px;
 }
-.role-sub {
-  display: block;
-  color: var(--ripple-navMuted);
-  font-size: var(--fs-12);
-  line-height: 18px;
-}
 .sidebar-status {
   color: var(--ripple-navMuted);
   font-size: var(--fs-12);
@@ -1274,9 +1268,6 @@ td {
   }
   .topbar-sep,
   .topbar-stage {
-    display: none;
-  }
-  .role-sub {
     display: none;
   }
   .page-content {

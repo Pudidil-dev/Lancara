@@ -113,14 +113,6 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.sidebar .role-sub {
-  overflow: hidden;
-  color: var(--ripple-navMuted);
-  font-size: var(--fs-12);
-  line-height: 18px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 .sidebar-brand .brand {
   flex: 1 1 auto;
   min-width: 0;

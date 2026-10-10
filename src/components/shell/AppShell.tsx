@@ -117,7 +117,7 @@ export function AppShell({ children, title, description, actions, topbar = 'even
           </div>}
           <Button variant="ghost" type="button" className="role-card" aria-haspopup="menu" aria-expanded={accountOpen} onClick={() => setAccountOpen((v) => !v)}>
             <span className="role-avatar" aria-hidden="true">{initials(session.display_name)}</span>
-            <span className="role-text"><span className="role-name" title={session.display_name}>{session.display_name}</span><span className="role-sub">{session.role_label}</span></span>
+            <span className="role-text"><span className="role-name" title={session.display_name}>{session.display_name}</span></span>
           </Button>
         </div>
       </aside>
